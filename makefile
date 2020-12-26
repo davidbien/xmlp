@@ -37,7 +37,7 @@ endif
 MAKEBASE = ./bienutil/makebase.mk
 include $(MAKEBASE)
 
-SRCS = lextest.cpp
+SRCS = xmlpgen.cpp
 
 ifeq (1,$(TIDY))
 all: tidy

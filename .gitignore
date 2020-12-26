@@ -1,0 +1,54 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+.vs/lextest/v15/.suo
+*.db
+*.db-shm
+*.db-wal
+lexer/x64/Debug/lexer.log
+lexer/x64/Debug/lexer.tlog/CL.command.1.tlog
+lexer/x64/Debug/lexer.tlog/lexer.lastbuildstate
+*.tlog
+lexer/x64/Debug/vc141.idb
+lexer/x64/Debug/vc141.pdb
+*.opendb
+*.ilk
+x64/Debug/lexer.pdb
+x64/Debug/lextest.log
+x64/Debug/lextest.pdb
+x64/Debug/vc141.pdb
+*.ipch
+.vscode/ipch
+Debug_x86_64/
+Release_x86_64/
+lexer/Debug_x86_64/
+

@@ -1,0 +1,16 @@
+[submodule "bienutil"]
+	path = bienutil
+	url = git@github.com:davidbien/bienutil.git
+	update = merge
+[submodule "dgraph"]
+	path = dgraph
+	url = git@github.com:davidbien/dgraph.git
+	update = merge
+[submodule "lexang"]
+	path = lexang
+	url = git@github.com:davidbien/lexang.git
+	update = merge
+[submodule "xmlpinc"]
+	path = xmlpinc
+	url = git@github.com:davidbien/xmlpinc.git
+	update = merge
