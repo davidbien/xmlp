@@ -248,7 +248,7 @@ __REGEXP_OP_USING_NAMESPACE
 	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(_TyTriggerCharDataBegin()) * ++_NotAmperLessDouble * t(_TyTriggerCharDataEnd());
 	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(_TyTriggerCharDataSingleQuoteBegin()) * ++_NotAmperLessSingle * t(_TyTriggerCharDataSingleQuoteEnd());
 	// We need only record whether single or double quotes were used as a convenience to any reader/writer system that may want to duplicate the current manner of quoting.
-	_TyFinal	AttValue =	l(L'\"') * /* t( _TyTriggerAttValueDoubleQuote() ) */ * ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(L'\"') |	// [10]
+	_TyFinal	AttValue =	l(L'\"') * /* t( _TyTriggerAttValueDoubleQuote() )  * */ ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(L'\"') |	// [10]
 												l(L'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(L'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
 	_TyFinal	Attribute = /* NSAttName * Eq * AttValue | */ // [41]
 												QName * Eq * AttValue;
@@ -278,7 +278,7 @@ __REGEXP_OP_USING_NAMESPACE
 
 
 // prolog stuff:
-// XMLDecl:
+// XMLDecl and TextDecl(external DTDs):
 	_TyFinal	_YesSDDecl = ls(L"yes") * t(_TyTriggerStandaloneYes());
 	_TyFinal	_NoSDDecl = ls(L"no"); // Don't need to record when we get no.
 	_TyFinal	SDDecl = S * ls(L"standalone") * Eq *		// [32]
@@ -297,6 +297,7 @@ __REGEXP_OP_USING_NAMESPACE
 													(	l(L'\"') * t(_TyTriggerVersionNumDoubleQuote()) * VersionNum * l(L'\"') |
 														l(L'\'') * VersionNum * l(L'\'') );
 	_TyFinal	XMLDecl = ls(L"<?xml") * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(L"?>"); // [23]
+ 	_TyFinal	TextDecl = ls(L"<?xml") * --VersionInfo * EncodingDecl * --S * ls(L"?>"); //[77]
 
 // DTD stuff:
 	_TyFinal PEReference = l(L'%') * t(_TyTriggerPEReferenceBegin()) * Name * t(_TyTriggerPEReferenceEnd()) * l(L';');
@@ -306,7 +307,7 @@ __REGEXP_OP_USING_NAMESPACE
 	_TyFinal	Mixed = _MixedBegin * ~( --S * l(L'|') * --S * _TriggeredMixedName )
 														* --S * ls(L")*") |
 										_MixedBegin * --S * l(L')'); // [51].
-
+// EntityDecl stuff:
   _TyFinal	SystemLiteral =	l(L'\"') * t(_TyTriggerSystemLiteralBegin()) * ~lnot(L"\"") * t(_TyTriggerSystemLiteralDoubleQuoteEnd()) * l(L'\"') | //[11]
 														l(L'\'') * t(_TyTriggerSystemLiteralBegin()) * ~lnot(L"\'") * t(_TyTriggerSystemLiteralSingleQuoteEnd()) * l(L'\'');
 	_TyFinal	PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(L'a',L'z') | lr(L'A',L'Z') | lr(L'0',L'9') | lanyof(L"-'()+,./:=?;!*#@$_%");
@@ -316,9 +317,29 @@ __REGEXP_OP_USING_NAMESPACE
 	_TyFinal	ExternalID = ls(L"SYSTEM") * S * SystemLiteral | ls(L"PUBLIC") * S * PubidLiteral * S * SystemLiteral; //[75]
   _TyFinal	NDataDecl = S * ls(L"NDATA") * S * Name; //[76]
 
-// 	_TyFinal	EntityValue = 
-// [9]   	EntityValue	   ::=   	'"' ([^%&"] | PEReference | Reference)* '"'
-// |  "'" ([^%&'] | PEReference | Reference)* "'"
+	// Because this production is sharing triggers with AttValue they cannot appear in the same resultant production (token). That's fine because that isn't possible.
+	_TyFinal	_EVCharRangeNoPercentLessDouble =	t(_TyTriggerCharDataBegin()) * ++lnot(L"%&\"") * t(_TyTriggerCharDataEnd());
+	_TyFinal	_EVCharRangeNoPercentLessSingle =	t(_TyTriggerCharDataSingleQuoteBegin()) * ++lnot(L"%&\'") * t(_TyTriggerCharDataSingleQuoteEnd());
+	_TyFinal	EntityValue =	l(L'\"') * ~( _EVCharRangeNoPercentLessDouble | PEReference | Reference )  * l(L'\"') |	// [9]
+													l(L'\'') * ~( _EVCharRangeNoPercentLessSingle | PEReference | Reference ) * l(L'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
+ 	_TyFinal	EntityDef = EntityValue | ( ExternalID * --NDataDecl ); //[73]
+  _TyFinal	PEDef = EntityValue | ExternalID; //[74]
+	_TyFinal	GEDecl = ls(L"<!ENTITY") * S * Name * S * EntityDef * --S * l(L'>'); //[71]
+	_TyFinal	PEDecl = ls(L"<!ENTITY") * S * l(L'%') * S * Name * S * PEDef * --S * l(L'>'); //[72]
+	_TyFinal	EntityDecl = GEDecl | PEDecl; //[70]
+
+// DOCTYPE stuff: For DOCTYPE we will have a couple of different productions - depending on whether the intSubset is present (in between []).
+// This is because the various possible markupdecl productions need to be treated as tokens and the parser will need to switch the start symbol
+// 	to the set of productions for the intSubset as these represent a entirely distinct (for the most part) production set.
+// Note that an external DTD may start with TextDecl production.
+	_TyFinal 	doctype_begin = ls(L"<!DOCTYPE") * S * Name * --(S * ExternalID) * --S;
+	_TyFinal 	doctypedecl_no_intSubset = doctype_begin * l('>');
+	_TyFinal 	doctypedecl_intSubset_begin = doctype_begin * l('['); // This is returned as a token different from doctypedecl_no_intSubset. This will cause the parser to go into "DTD" mode, recognizing DTD markup, etc.
+	_TyFinal 	doctypedecl_intSubset_end = l(L']') * --S * l(L'>');
+
+
+
+
 
 // [70]   	EntityDecl	   ::=   	GEDecl | PEDecl
 // [71]   	GEDecl	   ::=   	'<!ENTITY' S Name S EntityDef S? '>'
