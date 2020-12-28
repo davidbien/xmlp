@@ -66,6 +66,7 @@ __REGEXP_OP_USING_NAMESPACE
 #define ls(x)	litstr< _TyCharTokens >(x)
 #define lr(x,y)	litrange< _TyCharTokens >(x,y)
 #define lnot(x) litnotset_no_surrogates< _TyCharTokens >(x)
+#define lanyof(x) litanyinset< _TyCharTokens >(x)
 #define u(n) unsatisfiable< _TyCharTokens >(n)
 #define t(a) _TyTrigger(a)
 #define a(a) _TyFreeAction(a)
@@ -184,6 +185,20 @@ __REGEXP_OP_USING_NAMESPACE
 	static const vtyActionIdent s_knTriggerPEReferenceEnd = 36;
 	typedef _l_trigger_position< _TyCharTokens, s_knTriggerPEReferenceBegin > _TyTriggerPEReferenceBegin;
 	typedef _l_trigger_string< _TyCharTokens, s_knTriggerPEReferenceEnd, s_knTriggerPEReferenceBegin > _TyTriggerPEReferenceEnd;
+
+	static const vtyActionIdent s_knTriggerSystemLiteralBegin = 37;
+	static const vtyActionIdent s_knTriggerSystemLiteralDoubleQuoteEnd = 38;
+	static const vtyActionIdent s_knTriggerSystemLiteralSingleQuoteEnd = 39;
+	typedef _l_trigger_position< _TyCharTokens, s_knTriggerSystemLiteralBegin > _TyTriggerSystemLiteralBegin;
+	typedef _l_trigger_string< _TyCharTokens, s_knTriggerSystemLiteralDoubleQuoteEnd, s_knTriggerSystemLiteralBegin > _TyTriggerSystemLiteralDoubleQuoteEnd;
+	typedef _l_trigger_string_typed_range< s_kdtPlainText, _TyTriggerSystemLiteralDoubleQuoteEnd, s_knTriggerSystemLiteralSingleQuoteEnd, s_knTriggerSystemLiteralBegin > _TyTriggerSystemLiteralSingleQuoteEnd;
+
+	static const vtyActionIdent s_knTriggerPubidLiteralBegin = 40;
+	static const vtyActionIdent s_knTriggerPubidLiteralDoubleQuoteEnd = 41;
+	static const vtyActionIdent s_knTriggerPubidLiteralSingleQuoteEnd = 42;
+	typedef _l_trigger_position< _TyCharTokens, s_knTriggerPubidLiteralBegin > _TyTriggerPubidLiteralBegin;
+	typedef _l_trigger_string< _TyCharTokens, s_knTriggerPubidLiteralDoubleQuoteEnd, s_knTriggerPubidLiteralBegin > _TyTriggerPubidLiteralDoubleQuoteEnd;
+	typedef _l_trigger_string_typed_range< s_kdtPlainText, _TyTriggerPubidLiteralDoubleQuoteEnd, s_knTriggerPubidLiteralSingleQuoteEnd, s_knTriggerPubidLiteralBegin > _TyTriggerPubidLiteralSingleQuoteEnd;
 
 // Tokens:
 	static const vtyActionIdent s_knTokenSTag = 1000;
@@ -310,10 +325,10 @@ __REGEXP_OP_USING_NAMESPACE
 // EntityDecl stuff:
   _TyFinal	SystemLiteral =	l(L'\"') * t(_TyTriggerSystemLiteralBegin()) * ~lnot(L"\"") * t(_TyTriggerSystemLiteralDoubleQuoteEnd()) * l(L'\"') | //[11]
 														l(L'\'') * t(_TyTriggerSystemLiteralBegin()) * ~lnot(L"\'") * t(_TyTriggerSystemLiteralSingleQuoteEnd()) * l(L'\'');
-	_TyFinal	PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(L'a',L'z') | lr(L'A',L'Z') | lr(L'0',L'9') | lanyof(L"-'()+,./:=?;!*#@$_%");
+	_TyFinal	PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(L'a',L'z') | lr(L'A',L'Z') | lr(L'0',L'9') | lanyof(L"-()+,./:=?;!*#@$_%");
 	_TyFinal	PubidChar = PubidCharLessSingleQuote | l('\''); //[13]
 	_TyFinal	PubidLiteral = l(L'\"') * t(_TyTriggerPubidLiteralBegin()) * ~PubidChar * t(_TyTriggerPubidLiteralDoubleQuoteEnd()) * l(L'\"') | //[12]
-														l(L'\'') * t(_TyTriggerPubidLiteralBegin()) * ~PubidChar * t(_TyTriggerPubidLiteralSingleQuoteEnd()) * l(L'\'');
+														l(L'\'') * t(_TyTriggerPubidLiteralBegin()) * ~PubidCharLessSingleQuote * t(_TyTriggerPubidLiteralSingleQuoteEnd()) * l(L'\'');
 	_TyFinal	ExternalID = ls(L"SYSTEM") * S * SystemLiteral | ls(L"PUBLIC") * S * PubidLiteral * S * SystemLiteral; //[75]
   _TyFinal	NDataDecl = S * ls(L"NDATA") * S * Name; //[76]
 
