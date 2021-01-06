@@ -6,7 +6,7 @@
 #include <memory>
 typedef std::allocator< char >	_TyDefaultAllocator;
 
-#define _L_REGEXP_DEFAULTCHAR	wchar_t
+#define _L_REGEXP_DEFAULTCHAR	char32_t
 #define __L_DEFAULT_ALLOCATOR _TyDefaultAllocator
 #include "_l_inc.h"
 #include <fstream>
@@ -14,7 +14,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 
 #include "jsonstrm.h"
 #include "jsonobjs.h"
-#include "syslogmgr.inl"
+#include "syslogmgr.inU"
 
 #ifdef __DGRAPH_COUNT_EL_ALLOC_LIFETIME
 int gs_iNodesAllocated = 0;
@@ -55,7 +55,7 @@ TryMain( int argc, char ** argv )
 
 __REGEXP_OP_USING_NAMESPACE
 
-	typedef wchar_t	_TyCharTokens;
+	typedef char32_t	_TyCharTokens;
   typedef _TyDefaultAllocator  _TyAllocator;
 	typedef _regexp_final< _TyCharTokens, _TyAllocator >		_TyFinal;
 	typedef _regexp_trigger< _TyCharTokens, _TyAllocator >	_TyTrigger;
@@ -222,135 +222,134 @@ __REGEXP_OP_USING_NAMESPACE
 
 // Utility and multiple use non-triggered productions:
 	_TyFinal	S = ++( l(0x20) | l(0x09) | l(0x0d) | l(0x0a) ); // [3]
-	_TyFinal	Eq = --S * l(L'=') * --S; // [25].
+	_TyFinal	Eq = --S * l(U'=') * --S; // [25].
 	_TyFinal	Char =	l(0x09) | l(0x0a) | l(0x0d) | lr(0x020,0xd7ff) | lr(0xe000,0xfffd) | lr(0x10000,0x10ffff); // [2].
 
-	_TyFinal NameStartChar = l(L':') | lr(L'A',L'Z') | l(L'_') | lr(L'a',L'z') | lr(0xC0,0xD6) | lr(0xD8,0xF6) // [4]
+	_TyFinal NameStartChar = l(U':') | lr(U'A',U'Z') | l(U'_') | lr(U'a',U'z') | lr(0xC0,0xD6) | lr(0xD8,0xF6) // [4]
 														| lr(0xF8,0x2FF) | lr(0x370,0x37D) | lr(0x37F,0x1FFF) | lr(0x200C,0x200D) | lr(0x2070,0x218F) 
 														| lr(0x2C00,0x2FEF) | lr(0x3001,0xD7FF) | lr(0xF900,0xFDCF) | lr(0xFDF0,0xFFFD) | lr(0x10000,0xEFFFF);
-	_TyFinal NameChar = NameStartChar | l(L'-') | l(L'.') | lr(L'0',L'9') | l(0xB7) | lr(0x0300,0x036F) | lr(0x203F,0x2040);	// [4a]
+	_TyFinal NameChar = NameStartChar | l(U'-') | l(U'.') | lr(U'0',U'9') | l(0xB7) | lr(0x0300,0x036F) | lr(0x203F,0x2040);	// [4a]
 	_TyFinal Name = NameStartChar * ~NameChar; // [5]
 	_TyFinal Names = Name * ~( S * Name ); // [6]
 	_TyFinal Nmtoken = ++NameChar;
 	_TyFinal Nmtokens = Nmtoken * ~( S * Nmtoken );
 
-	_TyFinal NameStartCharNoColon = lr(L'A',L'Z') | l(L'_') | lr(L'a',L'z') | lr(0xC0,0xD6) | lr(0xD8,0xF6) // [4]
+	_TyFinal NameStartCharNoColon = lr(U'A',U'Z') | l(U'_') | lr(U'a',U'z') | lr(0xC0,0xD6) | lr(0xD8,0xF6) // [4]
 													| lr(0xF8,0x2FF) | lr(0x370,0x37D) | lr(0x37F,0x1FFF) | lr(0x200C,0x200D) | lr(0x2070,0x218F) 
 													| lr(0x2C00,0x2FEF) | lr(0x3001,0xD7FF) | lr(0xF900,0xFDCF) | lr(0xFDF0,0xFFFD) | lr(0x10000,0xEFFFF);
-	_TyFinal NameCharNoColon = NameStartCharNoColon | l(L'-') | l(L'.') | lr(L'0',L'9') | l(0xB7) | lr(0x0300,0x036F) | lr(0x203F,0x2040);	// [4a]
+	_TyFinal NameCharNoColon = NameStartCharNoColon | l(U'-') | l(U'.') | lr(U'0',U'9') | l(0xB7) | lr(0x0300,0x036F) | lr(0x203F,0x2040);	// [4a]
 	_TyFinal NCName = NameStartCharNoColon * ~NameCharNoColon;
 	_TyFinal	Prefix = NCName;
 	_TyFinal	LocalPart = NCName;
 
 // Qualified name:
-	_TyFinal	QName = t(_TyTriggerPrefixBegin()) * Prefix * t(_TyTriggerPrefixEnd()) * --( l(L':')	* t( _TyTriggerLocalPartBegin() ) * LocalPart * t( _TyTriggerLocalPartEnd() ) );
+	_TyFinal	QName = t(_TyTriggerPrefixBegin()) * Prefix * t(_TyTriggerPrefixEnd()) * --( l(U':')	* t( _TyTriggerLocalPartBegin() ) * LocalPart * t( _TyTriggerLocalPartEnd() ) );
 #if 0 // We have to rid these because they match the QName production and therefore they cause trigger confusion. We'll have to check in post-processing for xmlns as the prefix.
-	_TyFinal	DefaultAttName = ls(L"xmlns") /* * t( _TyTriggerDefaultAttName() ) */;
-	_TyFinal	PrefixedAttName = ls(L"xmlns:") * t( _TyTriggerPrefixedAttNameBegin() ) * NCName * t( _TyTriggerPrefixedAttNameEnd() );
+	_TyFinal	DefaultAttName = ls(U"xmlns") /* * t( _TyTriggerDefaultAttName() ) */;
+	_TyFinal	PrefixedAttName = ls(U"xmlns:") * t( _TyTriggerPrefixedAttNameBegin() ) * NCName * t( _TyTriggerPrefixedAttNameEnd() );
 	_TyFinal	NSAttName = PrefixedAttName | DefaultAttName;
 #endif //0
 
 // Attribute value and character data productions:
-	_TyFinal	EntityRef = l(L'&') * t( _TyTriggerEntityRefBegin() ) 	// [49]
-																* Name * t( _TyTriggerEntityRefEnd() ) * l(L';');
-	_TyFinal	CharRef = ( ls(L"&#") * t( _TyTriggerCharDecRefBegin() )  * ++lr(L'0',L'9') * t( _TyTriggerCharDecRefEnd()  ) * l(L';') )	// [66]
-							| ( ls(L"&#x") * t( _TyTriggerCharHexRefBegin() ) * ++( lr(L'0',L'9') | lr(L'A',L'F') | lr(L'a',L'f') ) * t( _TyTriggerCharHexRefEnd() ) * l(L';') );
+	_TyFinal	EntityRef = l(U'&') * t( _TyTriggerEntityRefBegin() ) 	// [49]
+																* Name * t( _TyTriggerEntityRefEnd() ) * l(U';');
+	_TyFinal	CharRef = ( ls(U"&#") * t( _TyTriggerCharDecRefBegin() )  * ++lr(U'0',U'9') * t( _TyTriggerCharDecRefEnd()  ) * l(U';') )	// [66]
+							| ( ls(U"&#x") * t( _TyTriggerCharHexRefBegin() ) * ++( lr(U'0',U'9') | lr(U'A',U'F') | lr(U'a',U'f') ) * t( _TyTriggerCharHexRefEnd() ) * l(U';') );
 	_TyFinal	Reference = EntityRef | CharRef;	// [67]
 	// We use the same triggers for these just to save implementation space and because we know by the final trigger
 	//	whether a single or double quote was present.
-	_TyFinal _NotAmperLessDouble = lr(1,L'!') |  lr(L'#',L'%') | lr(L'\'',L';') | lr(L'=',0xD7FF) | lr(0xE000,0x10ffff); // == lnot("&<\"")
-	_TyFinal _NotAmperLessSingle = lr(1,L'%') |  lr(L'(',L';') | lr(L'=',0xD7FF) | lr(0xE000,0x10ffff); // == lnot("&<\'")
+	_TyFinal _NotAmperLessDouble = lr(1,U'!') |  lr(U'#',U'%') | lr(U'\'',U';') | lr(U'=',0xD7FF) | lr(0xE000,0x10ffff); // == lnot("&<\"")
+	_TyFinal _NotAmperLessSingle = lr(1,U'%') |  lr(U'(',U';') | lr(U'=',0xD7FF) | lr(0xE000,0x10ffff); // == lnot("&<\'")
 	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(_TyTriggerCharDataBegin()) * ++_NotAmperLessDouble * t(_TyTriggerCharDataEnd());
 	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(_TyTriggerCharDataSingleQuoteBegin()) * ++_NotAmperLessSingle * t(_TyTriggerCharDataSingleQuoteEnd());
 	// We need only record whether single or double quotes were used as a convenience to any reader/writer system that may want to duplicate the current manner of quoting.
-	_TyFinal	AttValue =	l(L'\"') * /* t( _TyTriggerAttValueDoubleQuote() )  * */ ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(L'\"') |	// [10]
-												l(L'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(L'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
+	_TyFinal	AttValue =	l(U'\"') * /* t( _TyTriggerAttValueDoubleQuote() )  * */ ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(U'\"') |	// [10]
+												l(U'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(U'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
 	_TyFinal	Attribute = /* NSAttName * Eq * AttValue | */ // [41]
 												QName * Eq * AttValue;
 
 // The various types of tags:
-  _TyFinal	STag = l(L'<') * QName * t(_TyTriggerSaveTagName()) * ~( S * Attribute * t(_TyTriggerSaveAttributes()) ) * --S * l(L'>'); // [12]
-	_TyFinal	ETag = ls(L"</") * QName * --S * l(L'>');// [13]
-  _TyFinal	EmptyElemTag = l(L'<') * QName * t(_TyTriggerSaveTagName()) * ~( S * Attribute * t(_TyTriggerSaveAttributes()) ) * --S * ls(L"/>");// [14]								
+  _TyFinal	STag = l(U'<') * QName * t(_TyTriggerSaveTagName()) * ~( S * Attribute * t(_TyTriggerSaveAttributes()) ) * --S * l(U'>'); // [12]
+	_TyFinal	ETag = ls(U"</") * QName * --S * l(U'>');// [13]
+  _TyFinal	EmptyElemTag = l(U'<') * QName * t(_TyTriggerSaveTagName()) * ~( S * Attribute * t(_TyTriggerSaveAttributes()) ) * --S * ls(U"/>");// [14]								
 
 // Processsing instruction:
-	_TyFinal PITarget = Name - ( ( ( l(L'x') | l(L'X') ) * ( l(L'm') | l(L'M') ) * ( l(L'l') | l(L'L') ) ) ); // This produces an anti-accepting state for "xml" or "XML".
-	_TyFinal	PI = ls(L"<?")	* t( _TyTriggerPITargetStart() ) * PITarget * t( _TyTriggerPITargetEnd() )
-			* ( ls(L"?>") | ( S * t( _TyTriggerPITargetMeatBegin() ) * ( ~Char + ls(L"?>") ) ) ) * t( _TyTriggerPITargetMeatEnd() );
+	_TyFinal PITarget = Name - ( ( ( l(U'x') | l(U'X') ) * ( l(U'm') | l(U'M') ) * ( l(U'U') | l(U'U') ) ) ); // This produces an anti-accepting state for "xmU" or "XMU".
+	_TyFinal	PI = ls(U"<?")	* t( _TyTriggerPITargetStart() ) * PITarget * t( _TyTriggerPITargetEnd() )
+			* ( ls(U"?>") | ( S * t( _TyTriggerPITargetMeatBegin() ) * ( ~Char + ls(U"?>") ) ) ) * t( _TyTriggerPITargetMeatEnd() );
 
 // Comment:
 	_TyFinal	_CharNoMinus =	l(0x09) | l(0x0a) | l(0x0d) | // [2].
 										lr(0x020,0x02c) | lr(0x02e,0xd7ff) | lr(0xe000,0xfffd) | lr(0x10000,0x10ffff);
 	// For a comment the end trigger was messing with the production since it kept the second '-'
-	_TyFinal Comment = ls(L"<!--") /* * t(_TyTriggerCommentBegin())  */* ~(_CharNoMinus | (l(L'-') * _CharNoMinus))/*  * t(_TyTriggerCommentEnd()) */ * ls(L"-->");
+	_TyFinal Comment = ls(U"<!--") /* * t(_TyTriggerCommentBegin())  */* ~(_CharNoMinus | (l(U'-') * _CharNoMinus))/*  * t(_TyTriggerCommentEnd()) */ * ls(U"-->");
 
 // CDataSection:
 	// As with Comments we cannot use triggers in this production since the characters in "]]>" are also present in the production Char.
 	// This is not transtion from character classes where the trigger can fire.
-	_TyFinal CDStart = ls(L"<![CDATA["); //[18]
-	_TyFinal CDEnd = ls(L"]]>"); //[21]
+	_TyFinal CDStart = ls(U"<![CDATA["); //[18]
+	_TyFinal CDEnd = ls(U"]]>"); //[21]
 	_TyFinal CDSect = CDStart * ~Char + CDEnd; 
-
 
 // prolog stuff:
 // XMLDecl and TextDecl(external DTDs):
-	_TyFinal	_YesSDDecl = ls(L"yes") * t(_TyTriggerStandaloneYes());
-	_TyFinal	_NoSDDecl = ls(L"no"); // Don't need to record when we get no.
-	_TyFinal	SDDecl = S * ls(L"standalone") * Eq *		// [32]
-		( ( l(L'\"') * t(_TyTriggerStandaloneDoubleQuote()) * ( _YesSDDecl | _NoSDDecl ) * l(L'\"') ) |
-			( l(L'\'') * ( _YesSDDecl | _NoSDDecl ) * l(L'\'') ) );
-	_TyFinal	EncName = ( lr(L'A',L'Z') | lr(L'a',L'z') ) * // [81]
-											~(	lr(L'A',L'Z') | lr(L'a',L'z') | 
-													lr(L'0',L'9') | l(L'.') | l(L'_') | l(L'-') );
+	_TyFinal	_YesSDDecl = ls(U"yes") * t(_TyTriggerStandaloneYes());
+	_TyFinal	_NoSDDecl = ls(U"no"); // Don't need to record when we get no.
+	_TyFinal	SDDecl = S * ls(U"standalone") * Eq *		// [32]
+		( ( l(U'\"') * t(_TyTriggerStandaloneDoubleQuote()) * ( _YesSDDecl | _NoSDDecl ) * l(U'\"') ) |
+			( l(U'\'') * ( _YesSDDecl | _NoSDDecl ) * l(U'\'') ) );
+	_TyFinal	EncName = ( lr(U'A',U'Z') | lr(U'a',U'z') ) * // [81]
+											~(	lr(U'A',U'Z') | lr(U'a',U'z') | 
+													lr(U'0',U'9') | l(U'.') | l(U'_') | l(U'-') );
 	_TyFinal	_TrEncName =	t(_TyTriggerEncodingNameBegin()) *  EncName * t(_TyTriggerEncodingNameEnd());
-	_TyFinal	EncodingDecl = S * ls(L"encoding") * Eq *			// [80].
-			( l(L'\"') * t( _TyTriggerEncDeclDoubleQuote()) * _TrEncName * l(L'\"') | 
-				l(L'\'') * _TrEncName * l(L'\'') );
+	_TyFinal	EncodingDecl = S * ls(U"encoding") * Eq *			// [80].
+			( l(U'\"') * t( _TyTriggerEncDeclDoubleQuote()) * _TrEncName * l(U'\"') | 
+				l(U'\'') * _TrEncName * l(U'\'') );
 
-	_TyFinal	VersionNum = ls(L"1.") * t(_TyTriggerVersionNumBegin()) * ++lr(L'0',L'9') * t(_TyTriggerVersionNumEnd());
-	_TyFinal	VersionInfo = S * ls(L"version") * Eq * // [24]
-													(	l(L'\"') * t(_TyTriggerVersionNumDoubleQuote()) * VersionNum * l(L'\"') |
-														l(L'\'') * VersionNum * l(L'\'') );
-	_TyFinal	XMLDecl = ls(L"<?xml") * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(L"?>"); // [23]
- 	_TyFinal	TextDecl = ls(L"<?xml") * --VersionInfo * EncodingDecl * --S * ls(L"?>"); //[77]
+	_TyFinal	VersionNum = ls(U"1.") * t(_TyTriggerVersionNumBegin()) * ++lr(U'0',U'9') * t(_TyTriggerVersionNumEnd());
+	_TyFinal	VersionInfo = S * ls(U"version") * Eq * // [24]
+													(	l(U'\"') * t(_TyTriggerVersionNumDoubleQuote()) * VersionNum * l(U'\"') |
+														l(U'\'') * VersionNum * l(U'\'') );
+	_TyFinal	XMLDecl = ls(U"<?xmU") * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(U"?>"); // [23]
+ 	_TyFinal	TextDecl = ls(U"<?xmU") * --VersionInfo * EncodingDecl * --S * ls(U"?>"); //[77]
 
 // DTD stuff:
-	_TyFinal PEReference = l(L'%') * t(_TyTriggerPEReferenceBegin()) * Name * t(_TyTriggerPEReferenceEnd()) * l(L';');
+	_TyFinal PEReference = l(U'%') * t(_TyTriggerPEReferenceBegin()) * Name * t(_TyTriggerPEReferenceEnd()) * l(U';');
 // Mixed:
-	_TyFinal	_MixedBegin = l(L'(') * --S * ls(L"#PCDATA");
+	_TyFinal	_MixedBegin = l(U'(') * --S * ls(U"#PCDATA");
 	_TyFinal	_TriggeredMixedName = t( _TyTriggerMixedNameBegin() ) * Name  * t( _TyTriggerMixedNameEnd() );
-	_TyFinal	Mixed = _MixedBegin * ~( --S * l(L'|') * --S * _TriggeredMixedName )
-														* --S * ls(L")*") |
-										_MixedBegin * --S * l(L')'); // [51].
+	_TyFinal	Mixed = _MixedBegin * ~( --S * l(U'|') * --S * _TriggeredMixedName )
+														* --S * ls(U")*") |
+										_MixedBegin * --S * l(U')'); // [51].
 // EntityDecl stuff:
-  _TyFinal	SystemLiteral =	l(L'\"') * t(_TyTriggerSystemLiteralBegin()) * ~lnot(L"\"") * t(_TyTriggerSystemLiteralDoubleQuoteEnd()) * l(L'\"') | //[11]
-														l(L'\'') * t(_TyTriggerSystemLiteralBegin()) * ~lnot(L"\'") * t(_TyTriggerSystemLiteralSingleQuoteEnd()) * l(L'\'');
-	_TyFinal	PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(L'a',L'z') | lr(L'A',L'Z') | lr(L'0',L'9') | lanyof(L"-()+,./:=?;!*#@$_%");
+  _TyFinal	SystemLiteral =	l(U'\"') * t(_TyTriggerSystemLiteralBegin()) * ~lnot(U"\"") * t(_TyTriggerSystemLiteralDoubleQuoteEnd()) * l(U'\"') | //[11]
+														l(U'\'') * t(_TyTriggerSystemLiteralBegin()) * ~lnot(U"\'") * t(_TyTriggerSystemLiteralSingleQuoteEnd()) * l(U'\'');
+	_TyFinal	PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(U'a',U'z') | lr(U'A',U'Z') | lr(U'0',U'9') | lanyof(U"-()+,./:=?;!*#@$_%");
 	_TyFinal	PubidChar = PubidCharLessSingleQuote | l('\''); //[13]
-	_TyFinal	PubidLiteral = l(L'\"') * t(_TyTriggerPubidLiteralBegin()) * ~PubidChar * t(_TyTriggerPubidLiteralDoubleQuoteEnd()) * l(L'\"') | //[12]
-														l(L'\'') * t(_TyTriggerPubidLiteralBegin()) * ~PubidCharLessSingleQuote * t(_TyTriggerPubidLiteralSingleQuoteEnd()) * l(L'\'');
-	_TyFinal	ExternalID = ls(L"SYSTEM") * S * SystemLiteral | ls(L"PUBLIC") * S * PubidLiteral * S * SystemLiteral; //[75]
-  _TyFinal	NDataDecl = S * ls(L"NDATA") * S * Name; //[76]
+	_TyFinal	PubidLiteral = l(U'\"') * t(_TyTriggerPubidLiteralBegin()) * ~PubidChar * t(_TyTriggerPubidLiteralDoubleQuoteEnd()) * l(U'\"') | //[12]
+														l(U'\'') * t(_TyTriggerPubidLiteralBegin()) * ~PubidCharLessSingleQuote * t(_TyTriggerPubidLiteralSingleQuoteEnd()) * l(U'\'');
+	_TyFinal	ExternalID = ls(U"SYSTEM") * S * SystemLiteral | ls(U"PUBLIC") * S * PubidLiteral * S * SystemLiteral; //[75]
+  _TyFinal	NDataDecl = S * ls(U"NDATA") * S * Name; //[76]
 
 	// Because this production is sharing triggers with AttValue they cannot appear in the same resultant production (token). That's fine because that isn't possible.
-	_TyFinal	_EVCharRangeNoPercentLessDouble =	t(_TyTriggerCharDataBegin()) * ++lnot(L"%&\"") * t(_TyTriggerCharDataEnd());
-	_TyFinal	_EVCharRangeNoPercentLessSingle =	t(_TyTriggerCharDataSingleQuoteBegin()) * ++lnot(L"%&\'") * t(_TyTriggerCharDataSingleQuoteEnd());
-	_TyFinal	EntityValue =	l(L'\"') * ~( _EVCharRangeNoPercentLessDouble | PEReference | Reference )  * l(L'\"') |	// [9]
-													l(L'\'') * ~( _EVCharRangeNoPercentLessSingle | PEReference | Reference ) * l(L'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
+	_TyFinal	_EVCharRangeNoPercentLessDouble =	t(_TyTriggerCharDataBegin()) * ++lnot(U"%&\"") * t(_TyTriggerCharDataEnd());
+	_TyFinal	_EVCharRangeNoPercentLessSingle =	t(_TyTriggerCharDataSingleQuoteBegin()) * ++lnot(U"%&\'") * t(_TyTriggerCharDataSingleQuoteEnd());
+	_TyFinal	EntityValue =	l(U'\"') * ~( _EVCharRangeNoPercentLessDouble | PEReference | Reference )  * l(U'\"') |	// [9]
+													l(U'\'') * ~( _EVCharRangeNoPercentLessSingle | PEReference | Reference ) * l(U'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
  	_TyFinal	EntityDef = EntityValue | ( ExternalID * --NDataDecl ); //[73]
   _TyFinal	PEDef = EntityValue | ExternalID; //[74]
-	_TyFinal	GEDecl = ls(L"<!ENTITY") * S * Name * S * EntityDef * --S * l(L'>'); //[71]
-	_TyFinal	PEDecl = ls(L"<!ENTITY") * S * l(L'%') * S * Name * S * PEDef * --S * l(L'>'); //[72]
+	_TyFinal	GEDecl = ls(U"<!ENTITY") * S * Name * S * EntityDef * --S * l(U'>'); //[71]
+	_TyFinal	PEDecl = ls(U"<!ENTITY") * S * l(U'%') * S * Name * S * PEDef * --S * l(U'>'); //[72]
 	_TyFinal	EntityDecl = GEDecl | PEDecl; //[70]
 
 // DOCTYPE stuff: For DOCTYPE we will have a couple of different productions - depending on whether the intSubset is present (in between []).
 // This is because the various possible markupdecl productions need to be treated as tokens and the parser will need to switch the start symbol
 // 	to the set of productions for the intSubset as these represent a entirely distinct (for the most part) production set.
 // Note that an external DTD may start with TextDecl production.
-	_TyFinal 	doctype_begin = ls(L"<!DOCTYPE") * S * Name * --(S * ExternalID) * --S;
+	_TyFinal 	doctype_begin = ls(U"<!DOCTYPE") * S * Name * --(S * ExternalID) * --S;
 	_TyFinal 	doctypedecl_no_intSubset = doctype_begin * l('>');
 	_TyFinal 	doctypedecl_intSubset_begin = doctype_begin * l('['); // This is returned as a token different from doctypedecl_no_intSubset. This will cause the parser to go into "DTD" mode, recognizing DTD markup, etc.
-	_TyFinal 	doctypedecl_intSubset_end = l(L']') * --S * l(L'>');
+	_TyFinal 	doctypedecl_intSubset_end = l(U']') * --S * l(U'>');
 
 
 
@@ -406,8 +405,8 @@ __REGEXP_OP_USING_NAMESPACE
     _l_generator< _TyDfa, char >
       gen("_testdfa.h",
         "TESTDFA", true, "ns_testdfa",
-        "state", "wchar_t", "L'", "'");
-    gen.add_dfa(dfaAll, dctxtAll, "startAll");
+        "state", "char32_t", "U'", "'");
+    gen.add_dfa(dfaAll, dctxtAll, "startAlU");
     gen.generate();
   }
   catch (exception const & _rex)
