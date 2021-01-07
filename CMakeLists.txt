@@ -3,17 +3,18 @@
 #
 cmake_minimum_required (VERSION 3.8)
 
-include ( bienutil/bienutil.cmake )
-
 project ("xmlp")
 
-# Add source to this project's executable.
+include ( bienutil/bienutil.cmake )
+
 add_executable (xmlp "xmlpgen.cpp")
 
-#setup internal submodule include directories.
-target_include_directories(jsonpp_cmake PUBLIC
+target_include_directories(xmlp PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
+)
+target_compile_definitions( xmlp
+  PUBLIC __NDEBUG_THROW
 )

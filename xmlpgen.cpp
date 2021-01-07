@@ -6,6 +6,8 @@
 #include <memory>
 typedef std::allocator< char >	_TyDefaultAllocator;
 
+#include "_compat.h"
+
 #define _L_REGEXP_DEFAULTCHAR	char32_t
 #define __L_DEFAULT_ALLOCATOR _TyDefaultAllocator
 #include "_l_inc.h"
@@ -14,7 +16,8 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 
 #include "jsonstrm.h"
 #include "jsonobjs.h"
-#include "syslogmgr.inU"
+#include "_compat.inl"
+#include "syslogmgr.inl"
 
 #ifdef __DGRAPH_COUNT_EL_ALLOC_LIFETIME
 int gs_iNodesAllocated = 0;
@@ -51,7 +54,13 @@ int
 TryMain( int argc, char ** argv )
 {
 	g_strProgramName = *argv;
-	n_SysLog::InitSysLog( argv[0],  LOG_PERROR, LOG_USER );
+	n_SysLog::InitSysLog( argv[0],  
+#ifndef WIN32
+		LOG_PERROR, LOG_USER
+#else //WIN32
+		0, 0
+#endif //WIN32
+	);
 
 __REGEXP_OP_USING_NAMESPACE
 
@@ -70,13 +79,6 @@ __REGEXP_OP_USING_NAMESPACE
 #define u(n) unsatisfiable< _TyCharTokens >(n)
 #define t(a) _TyTrigger(a)
 #define a(a) _TyFreeAction(a)
-
-	// There various types of data we might get in XML.
-	static const vtyDataType s_kdtPlainText = 0;
-	static const vtyDataType s_kdtEntityRef = 1;
-	static const vtyDataType s_kdtPEReference = 2;
-	static const vtyDataType s_kdtCharDecRef = 3;
-	static const vtyDataType s_kdtCharHexRef = 4;
 
 	static const vtyActionIdent s_knTriggerPITargetStart = 1;
 	static const vtyActionIdent s_knTriggerPITargetEnd = 2;
@@ -403,10 +405,10 @@ __REGEXP_OP_USING_NAMESPACE
     gen_dfa(All, dfaAll, dctxtAll);
 
     _l_generator< _TyDfa, char >
-      gen("_testdfa.h",
-        "TESTDFA", true, "ns_testdfa",
+      gen("_xmlplex.h",
+        "XMLPLEX", true, "ns_xmlplex",
         "state", "char32_t", "U'", "'");
-    gen.add_dfa(dfaAll, dctxtAll, "startAlU");
+    gen.add_dfa(dfaAll, dctxtAll, "startAll");
     gen.generate();
   }
   catch (exception const & _rex)
@@ -436,7 +438,7 @@ gen_dfa( t_TyFinal const & _rFinal, t_TyDfa & _rDfa, t_TyDfaCtxt & _rDfaCtxt )
 
 		{//B
 			typedef JsonCharTraits< typename _TyDfa::_TyChar > _tyJsonCharTraits;
-			typedef JsonLinuxOutputStream< _tyJsonCharTraits, char16_t > _tyJsonOutputStream;
+			typedef JsonFileOutputStream< _tyJsonCharTraits, char16_t > _tyJsonOutputStream;
 			typedef JsonFormatSpec< _tyJsonCharTraits > _tyJsonFormatSpec;
 			_tyJsonOutputStream josNfa;
 			josNfa.Open( "nfadump.json");
