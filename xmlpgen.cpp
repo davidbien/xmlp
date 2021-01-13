@@ -153,6 +153,10 @@ __REGEXP_OP_USING_NAMESPACE
 
 // prolog stuff:
 // XMLDecl and TextDecl(external DTDs):
+	// This makes things default to "standalone='no'" when no standalone statement is present.
+	// This is the statement of the specification that reflects this:
+	// "If there are external markup declarations but there is no standalone document declaration, the value 'no' is assumed."
+	// So we assume no and then the value is meaningless if there are no external declarations.
 	_TyFinal	_YesSDDecl = ls(U"yes") * t(TyGetTriggerStandaloneYes<_TyCTok>());
 	_TyFinal	_NoSDDecl = ls(U"no"); // Don't need to record when we get no.
 	_TyFinal	SDDecl = S * ls(U"standalone") * Eq *		// [32]
