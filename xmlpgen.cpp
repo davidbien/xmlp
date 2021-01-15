@@ -134,7 +134,7 @@ __REGEXP_OP_USING_NAMESPACE
   _TyFinal	EmptyElemTag = l(U'<') * QName * t(TyGetTriggerSaveTagName<_TyCTok>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyCTok>()) ) * --S * ls(U"/>");// [14]								
 
 // Processsing instruction:
-	_TyFinal PITarget = Name - ( ( ( l(U'x') | l(U'X') ) * ( l(U'm') | l(U'M') ) * ( l(U'U') | l(U'U') ) ) ); // This produces an anti-accepting state for "xmU" or "XMU".
+	_TyFinal PITarget = Name - ( ( ( l(U'x') | l(U'X') ) * ( l(U'm') | l(U'M') ) * ( l(U'L') | l(U'L') ) ) ); // This produces an anti-accepting state for "xml" or "XML".
 	_TyFinal	PI = ls(U"<?")	* t( TyGetTriggerPITargetStart<_TyCTok>() ) * PITarget * t( TyGetTriggerPITargetEnd<_TyCTok>() )
 			* ( ls(U"?>") | ( S * t( TyGetTriggerPITargetMeatBegin<_TyCTok>() ) * ( ~Char + ls(U"?>") ) ) ) * t( TyGetTriggerPITargetMeatEnd<_TyCTok>() );
 
@@ -146,7 +146,7 @@ __REGEXP_OP_USING_NAMESPACE
 
 // CDataSection:
 	// As with Comments we cannot use triggers in this production since the characters in "]]>" are also present in the production Char.
-	// This is not transtion from character classes where the trigger can fire.
+	// There is no transition from character classes where the trigger could possibly fire.
 	_TyFinal CDStart = ls(U"<![CDATA["); //[18]
 	_TyFinal CDEnd = ls(U"]]>"); //[21]
 	_TyFinal CDSect = CDStart * ~Char + CDEnd; 
@@ -174,8 +174,8 @@ __REGEXP_OP_USING_NAMESPACE
 	_TyFinal	VersionInfo = S * ls(U"version") * Eq * // [24]
 													(	l(U'\"') * t(TyGetTriggerVersionNumDoubleQuote<_TyCTok>()) * VersionNum * l(U'\"') |
 														l(U'\'') * VersionNum * l(U'\'') );
-	_TyFinal	XMLDecl = ls(U"<?xmU") * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(U"?>"); // [23]
- 	_TyFinal	TextDecl = ls(U"<?xmU") * --VersionInfo * EncodingDecl * --S * ls(U"?>"); //[77]
+	_TyFinal	XMLDecl = ls(U"<?xml") * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(U"?>"); // [23]
+ 	_TyFinal	TextDecl = ls(U"<?xml") * --VersionInfo * EncodingDecl * --S * ls(U"?>"); //[77]
 
 // DTD stuff:
 	_TyFinal PEReference = l(U'%') * t(TyGetTriggerPEReferenceBegin<_TyCTok>()) * Name * t(TyGetTriggerPEReferenceEnd<_TyCTok>()) * l(U';');
