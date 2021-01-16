@@ -18,6 +18,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "jsonobjs.h"
 #include "_compat.inl"
 #include "syslogmgr.inl"
+#include "xml_traits.h"
 
 #ifdef __DGRAPH_COUNT_EL_ALLOC_LIFETIME
 int gs_iNodesAllocated = 0;
@@ -27,6 +28,7 @@ int gs_iLinksConstructed = 0;
 #endif //__DGRAPH_COUNT_EL_ALLOC_LIFETIME
 
 __REGEXP_USING_NAMESPACE
+__XMLP_USING_NAMESPACE
 
 template < class t_TyFinal, class t_TyDfa, class t_TyDfaCtxt >
 void
@@ -62,7 +64,12 @@ TryMain( int argc, char ** argv )
 #endif //WIN32
 	);
 
-__REGEXP_OP_USING_NAMESPACE
+	__REGEXP_OP_USING_NAMESPACE
+
+	typedef _l_transport_fixedmem< char32_t > _TyTransport;
+	typedef xml_traits< _TyTransport, false, false > _TyXmlTraits;
+	typedef typename _TyXmlTraits::_TyLexTraits _TyLexTraits;
+	typedef _TyLexTraits _TyLexT; // shorthand for below.
 
 	typedef char32_t _TyCTok;
   typedef _TyDefaultAllocator  _TyAllocator;
@@ -76,7 +83,7 @@ __REGEXP_OP_USING_NAMESPACE
 #define lr(x,y)	litrange<_TyCTok>(x,y)
 #define lnot(x) litnotset_no_surrogates<_TyCTok>(x)
 #define lanyof(x) litanyinset<_TyCTok>(x)
-#define u(n) unsatisfiable<_TyCTok>(n)
+#define u(n) unsatisfiable<_TyLexT>(n)
 #define t(a) _TyTrigger(a)
 #define a(a) _TyFreeAction(a)
 
@@ -103,53 +110,59 @@ __REGEXP_OP_USING_NAMESPACE
 	_TyFinal	LocalPart = NCName;
 
 // Qualified name:
-	_TyFinal	QName = t(TyGetTriggerPrefixBegin<_TyCTok>()) * Prefix * t(TyGetTriggerPrefixEnd<_TyCTok>()) * --( l(U':')	* t( TyGetTriggerLocalPartBegin<_TyCTok>() ) * LocalPart * t( TyGetTriggerLocalPartEnd<_TyCTok>() ) );
+	_TyFinal	QName = t(TyGetTriggerPrefixBegin<_TyLexT>()) * Prefix * t(TyGetTriggerPrefixEnd<_TyLexT>()) * --( l(U':')	* t( TyGetTriggerLocalPartBegin<_TyLexT>() ) * LocalPart * t( TyGetTriggerLocalPartEnd<_TyLexT>() ) );
 #if 0 // We have to rid these because they match the QName production and therefore they cause trigger confusion. We'll have to check in post-processing for xmlns as the prefix.
-	_TyFinal	DefaultAttName = ls(U"xmlns") /* * t( TyGetTriggerDefaultAttName<_TyCTok>() ) */;
-	_TyFinal	PrefixedAttName = ls(U"xmlns:") * t( TyGetTriggerPrefixedAttNameBegin<_TyCTok>() ) * NCName * t( TyGetTriggerPrefixedAttNameEnd<_TyCTok>() );
+	_TyFinal	DefaultAttName = ls(U"xmlns") /* * t( TyGetTriggerDefaultAttName<_TyLexT>() ) */;
+	_TyFinal	PrefixedAttName = ls(U"xmlns:") * t( TyGetTriggerPrefixedAttNameBegin<_TyLexT>() ) * NCName * t( TyGetTriggerPrefixedAttNameEnd<_TyLexT>() );
 	_TyFinal	NSAttName = PrefixedAttName | DefaultAttName;
 #endif //0
 
 // Attribute value and character data productions:
-	_TyFinal	EntityRef = l(U'&') * t( TyGetTriggerEntityRefBegin<_TyCTok>() ) 	// [49]
-																* Name * t( TyGetTriggerEntityRefEnd<_TyCTok>() ) * l(U';');
-	_TyFinal	CharRef = ( ls(U"&#") * t( TyGetTriggerCharDecRefBegin<_TyCTok>() )  * ++lr(U'0',U'9') * t( TyGetTriggerCharDecRefEnd<_TyCTok>()  ) * l(U';') )	// [66]
-							| ( ls(U"&#x") * t( TyGetTriggerCharHexRefBegin<_TyCTok>() ) * ++( lr(U'0',U'9') | lr(U'A',U'F') | lr(U'a',U'f') ) * t( TyGetTriggerCharHexRefEnd<_TyCTok>() ) * l(U';') );
+	_TyFinal	EntityRef = l(U'&') * t( TyGetTriggerEntityRefBegin<_TyLexT>() ) 	// [49]
+																* Name * t( TyGetTriggerEntityRefEnd<_TyLexT>() ) * l(U';');
+	_TyFinal	CharRef = ( ls(U"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() )  * ++lr(U'0',U'9') * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(U';') )	// [66]
+							| ( ls(U"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * ++( lr(U'0',U'9') | lr(U'A',U'F') | lr(U'a',U'f') ) * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(U';') );
 	_TyFinal	Reference = EntityRef | CharRef;	// [67]
 	// We use the same triggers for these just to save implementation space and because we know by the final trigger
 	//	whether a single or double quote was present.
 	_TyFinal _NotAmperLessDouble = lr(1,U'!') |  lr(U'#',U'%') | lr(U'\'',U';') | lr(U'=',0xD7FF) | lr(0xE000,0x10ffff); // == lnot("&<\"")
 	_TyFinal _NotAmperLessSingle = lr(1,U'%') |  lr(U'(',U';') | lr(U'=',0xD7FF) | lr(0xE000,0x10ffff); // == lnot("&<\'")
-	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyCTok>()) * ++_NotAmperLessDouble * t(TyGetTriggerCharDataEnd<_TyCTok>());
-	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyCTok>()) * ++_NotAmperLessSingle * t(TyGetTriggerCharDataSingleQuoteEnd<_TyCTok>());
+	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++_NotAmperLessDouble * t(TyGetTriggerCharDataEnd<_TyLexT>());
+	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++_NotAmperLessSingle * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
 	// We need only record whether single or double quotes were used as a convenience to any reader/writer system that may want to duplicate the current manner of quoting.
-	_TyFinal	AttValue =	l(U'\"') * /* t( TyGetTriggerAttValueDoubleQuote<_TyCTok>() )  * */ ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(U'\"') |	// [10]
+	_TyFinal	AttValue =	l(U'\"') * /* t( TyGetTriggerAttValueDoubleQuote<_TyLexT>() )  * */ ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(U'\"') |	// [10]
 												l(U'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(U'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
 	_TyFinal	Attribute = /* NSAttName * Eq * AttValue | */ // [41]
 												QName * Eq * AttValue;
 
 // The various types of tags:
-  _TyFinal	STag = l(U'<') * QName * t(TyGetTriggerSaveTagName<_TyCTok>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyCTok>()) ) * --S * l(U'>'); // [12]
+  _TyFinal	STag = l(U'<') * QName * t(TyGetTriggerSaveTagName<_TyLexT>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyLexT>()) ) * --S * l(U'>'); // [12]
 	_TyFinal	ETag = ls(U"</") * QName * --S * l(U'>');// [13]
-  _TyFinal	EmptyElemTag = l(U'<') * QName * t(TyGetTriggerSaveTagName<_TyCTok>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyCTok>()) ) * --S * ls(U"/>");// [14]								
+  _TyFinal	EmptyElemTag = l(U'<') * QName * t(TyGetTriggerSaveTagName<_TyLexT>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyLexT>()) ) * --S * ls(U"/>");// [14]								
 
 // Processsing instruction:
-	_TyFinal PITarget = Name - ( ( ( l(U'x') | l(U'X') ) * ( l(U'm') | l(U'M') ) * ( l(U'L') | l(U'L') ) ) ); // This produces an anti-accepting state for "xml" or "XML".
-	_TyFinal	PI = ls(U"<?")	* t( TyGetTriggerPITargetStart<_TyCTok>() ) * PITarget * t( TyGetTriggerPITargetEnd<_TyCTok>() )
-			* ( ls(U"?>") | ( S * t( TyGetTriggerPITargetMeatBegin<_TyCTok>() ) * ( ~Char + ls(U"?>") ) ) ) * t( TyGetTriggerPITargetMeatEnd<_TyCTok>() );
+	_TyFinal PITarget = Name - ( ( ( l(U'x') | l(U'X') ) * ( l(U'm') | l(U'M') ) * ( l(U'l') | l(U'L') ) ) ); // This produces an anti-accepting state for "xml" or "XML".;
+	_TyFinal	PI = ls(U"<?")	* t( TyGetTriggerPITargetStart<_TyLexT>() ) * PITarget * t( TyGetTriggerPITargetEnd<_TyLexT>() )
+			* ( ls(U"?>") | ( S * t( TyGetTriggerPITargetMeatBegin<_TyLexT>() ) * ( ~Char + ls(U"?>") ) ) );
 
 // Comment:
 	_TyFinal	_CharNoMinus =	l(0x09) | l(0x0a) | l(0x0d) | // [2].
 										lr(0x020,0x02c) | lr(0x02e,0xd7ff) | lr(0xe000,0xfffd) | lr(0x10000,0x10ffff);
 	// For a comment the end trigger was messing with the production since it kept the second '-'
-	_TyFinal Comment = ls(U"<!--") /* * t(TyGetTriggerCommentBegin<_TyCTok>())  */* ~(_CharNoMinus | (l(U'-') * _CharNoMinus))/*  * t(TyGetTriggerCommentEnd<_TyCTok>()) */ * ls(U"-->");
+	_TyFinal Comment = ls(U"<!--") /* * t(TyGetTriggerCommentBegin<_TyLexT>())  */* ~(_CharNoMinus | (l(U'-') * _CharNoMinus))/*  * t(TyGetTriggerCommentEnd<_TyLexT>()) */ * ls(U"-->");
 
 // CDataSection:
 	// As with Comments we cannot use triggers in this production since the characters in "]]>" are also present in the production Char.
 	// There is no transition from character classes where the trigger could possibly fire.
-	_TyFinal CDStart = ls(U"<![CDATA["); //[18]
+	//_TyFinal CDStart = ls(U"<![CDATA["); //[18]
+	//_TyFinal CDEnd = ls(U"]]>"); //[21]
+	//_TyFinal CDSect = ( CDStart * ~Char ) + CDEnd; 
+	_TyFinal CDStart = ls(U"<"); //[18]
 	_TyFinal CDEnd = ls(U"]]>"); //[21]
-	_TyFinal CDSect = CDStart * ~Char + CDEnd; 
+	_TyFinal CDSect = ( CDStart * ~lr(0x1,0x10ffff) ) + CDEnd; 
+
+// CharData and/or references:
+//	_TyFinal CharDataAndReferences = ++( _AVCharRangeNoAmperLessDouble | Reference ) * ;
 
 // prolog stuff:
 // XMLDecl and TextDecl(external DTDs):
@@ -157,47 +170,52 @@ __REGEXP_OP_USING_NAMESPACE
 	// This is the statement of the specification that reflects this:
 	// "If there are external markup declarations but there is no standalone document declaration, the value 'no' is assumed."
 	// So we assume no and then the value is meaningless if there are no external declarations.
-	_TyFinal	_YesSDDecl = ls(U"yes") * t(TyGetTriggerStandaloneYes<_TyCTok>());
+	_TyFinal	_YesSDDecl = ls(U"yes") * t(TyGetTriggerStandaloneYes<_TyLexT>());
 	_TyFinal	_NoSDDecl = ls(U"no"); // Don't need to record when we get no.
 	_TyFinal	SDDecl = S * ls(U"standalone") * Eq *		// [32]
-		( ( l(U'\"') * t(TyGetTriggerStandaloneDoubleQuote<_TyCTok>()) * ( _YesSDDecl | _NoSDDecl ) * l(U'\"') ) |
+		( ( l(U'\"') * t(TyGetTriggerStandaloneDoubleQuote<_TyLexT>()) * ( _YesSDDecl | _NoSDDecl ) * l(U'\"') ) |
 			( l(U'\'') * ( _YesSDDecl | _NoSDDecl ) * l(U'\'') ) );
 	_TyFinal	EncName = ( lr(U'A',U'Z') | lr(U'a',U'z') ) * // [81]
 											~(	lr(U'A',U'Z') | lr(U'a',U'z') | 
 													lr(U'0',U'9') | l(U'.') | l(U'_') | l(U'-') );
-	_TyFinal	_TrEncName =	t(TyGetTriggerEncodingNameBegin<_TyCTok>()) *  EncName * t(TyGetTriggerEncodingNameEnd<_TyCTok>());
+	_TyFinal	_TrEncName =	t(TyGetTriggerEncodingNameBegin<_TyLexT>()) *  EncName * t(TyGetTriggerEncodingNameEnd<_TyLexT>());
 	_TyFinal	EncodingDecl = S * ls(U"encoding") * Eq *			// [80].
-			( l(U'\"') * t( TyGetTriggerEncDeclDoubleQuote<_TyCTok>()) * _TrEncName * l(U'\"') | 
+			( l(U'\"') * t( TyGetTriggerEncDeclDoubleQuote<_TyLexT>()) * _TrEncName * l(U'\"') | 
 				l(U'\'') * _TrEncName * l(U'\'') );
 
-	_TyFinal	VersionNum = ls(U"1.") * t(TyGetTriggerVersionNumBegin<_TyCTok>()) * ++lr(U'0',U'9') * t(TyGetTriggerVersionNumEnd<_TyCTok>());
+	_TyFinal	VersionNum = ls(U"1.") * t(TyGetTriggerVersionNumBegin<_TyLexT>()) * ++lr(U'0',U'9') * t(TyGetTriggerVersionNumEnd<_TyLexT>());
 	_TyFinal	VersionInfo = S * ls(U"version") * Eq * // [24]
-													(	l(U'\"') * t(TyGetTriggerVersionNumDoubleQuote<_TyCTok>()) * VersionNum * l(U'\"') |
+													(	l(U'\"') * t(TyGetTriggerVersionNumDoubleQuote<_TyLexT>()) * VersionNum * l(U'\"') |
 														l(U'\'') * VersionNum * l(U'\'') );
+
 	_TyFinal	XMLDecl = ls(U"<?xml") * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(U"?>"); // [23]
  	_TyFinal	TextDecl = ls(U"<?xml") * --VersionInfo * EncodingDecl * --S * ls(U"?>"); //[77]
+	// In order to have both the PI production (processing instruction) and the XMLDecl production in the same DFA you have to match them up initially - including the triggers - the same triggers.
+	// However I am just going to move XMLDecl and TextDecl to their own DFAs and only use them at the start of a file. This allows better validation at the same time.
+	//_TyFinal	XMLDecl = ls(U"<?") * t( TyGetTriggerPITargetStart<_TyLexT>() ) * ls(U"xml") * t( TyGetTriggerPITargetEnd<_TyLexT>() ) * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(U"?>"); // [23]
+ //	_TyFinal	TextDecl = ls(U"<?") * t( TyGetTriggerPITargetStart<_TyLexT>() ) * ls(U"xml") * t( TyGetTriggerPITargetEnd<_TyLexT>() ) *  --VersionInfo * EncodingDecl * --S * ls(U"?>"); //[77]
 
 // DTD stuff:
-	_TyFinal PEReference = l(U'%') * t(TyGetTriggerPEReferenceBegin<_TyCTok>()) * Name * t(TyGetTriggerPEReferenceEnd<_TyCTok>()) * l(U';');
+	_TyFinal PEReference = l(U'%') * t(TyGetTriggerPEReferenceBegin<_TyLexT>()) * Name * t(TyGetTriggerPEReferenceEnd<_TyLexT>()) * l(U';');
 // Mixed:
 	_TyFinal	_MixedBegin = l(U'(') * --S * ls(U"#PCDATA");
-	_TyFinal	_TriggeredMixedName = t( TyGetTriggerMixedNameBegin<_TyCTok>() ) * Name  * t( TyGetTriggerMixedNameEnd<_TyCTok>() );
+	_TyFinal	_TriggeredMixedName = t( TyGetTriggerMixedNameBegin<_TyLexT>() ) * Name  * t( TyGetTriggerMixedNameEnd<_TyLexT>() );
 	_TyFinal	Mixed = _MixedBegin * ~( --S * l(U'|') * --S * _TriggeredMixedName )
 														* --S * ls(U")*") |
 										_MixedBegin * --S * l(U')'); // [51].
 // EntityDecl stuff:
-  _TyFinal	SystemLiteral =	l(U'\"') * t(TyGetTriggerSystemLiteralBegin<_TyCTok>()) * ~lnot(U"\"") * t(TyGetTriggerSystemLiteralDoubleQuoteEnd<_TyCTok>()) * l(U'\"') | //[11]
-														l(U'\'') * t(TyGetTriggerSystemLiteralBegin<_TyCTok>()) * ~lnot(U"\'") * t(TyGetTriggerSystemLiteralSingleQuoteEnd<_TyCTok>()) * l(U'\'');
+  _TyFinal	SystemLiteral =	l(U'\"') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~lnot(U"\"") * t(TyGetTriggerSystemLiteralDoubleQuoteEnd<_TyLexT>()) * l(U'\"') | //[11]
+														l(U'\'') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~lnot(U"\'") * t(TyGetTriggerSystemLiteralSingleQuoteEnd<_TyLexT>()) * l(U'\'');
 	_TyFinal	PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(U'a',U'z') | lr(U'A',U'Z') | lr(U'0',U'9') | lanyof(U"-()+,./:=?;!*#@$_%");
 	_TyFinal	PubidChar = PubidCharLessSingleQuote | l('\''); //[13]
-	_TyFinal	PubidLiteral = l(U'\"') * t(TyGetTriggerPubidLiteralBegin<_TyCTok>()) * ~PubidChar * t(TyGetTriggerPubidLiteralDoubleQuoteEnd<_TyCTok>()) * l(U'\"') | //[12]
-														l(U'\'') * t(TyGetTriggerPubidLiteralBegin<_TyCTok>()) * ~PubidCharLessSingleQuote * t(TyGetTriggerPubidLiteralSingleQuoteEnd<_TyCTok>()) * l(U'\'');
+	_TyFinal	PubidLiteral = l(U'\"') * t(TyGetTriggerPubidLiteralBegin<_TyLexT>()) * ~PubidChar * t(TyGetTriggerPubidLiteralDoubleQuoteEnd<_TyLexT>()) * l(U'\"') | //[12]
+														l(U'\'') * t(TyGetTriggerPubidLiteralBegin<_TyLexT>()) * ~PubidCharLessSingleQuote * t(TyGetTriggerPubidLiteralSingleQuoteEnd<_TyLexT>()) * l(U'\'');
 	_TyFinal	ExternalID = ls(U"SYSTEM") * S * SystemLiteral | ls(U"PUBLIC") * S * PubidLiteral * S * SystemLiteral; //[75]
   _TyFinal	NDataDecl = S * ls(U"NDATA") * S * Name; //[76]
 
 	// Because this production is sharing triggers with AttValue they cannot appear in the same resultant production (token). That's fine because that isn't possible.
-	_TyFinal	_EVCharRangeNoPercentLessDouble =	t(TyGetTriggerCharDataBegin<_TyCTok>()) * ++lnot(U"%&\"") * t(TyGetTriggerCharDataEnd<_TyCTok>());
-	_TyFinal	_EVCharRangeNoPercentLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyCTok>()) * ++lnot(U"%&\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyCTok>());
+	_TyFinal	_EVCharRangeNoPercentLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(U"%&\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
+	_TyFinal	_EVCharRangeNoPercentLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++lnot(U"%&\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
 	_TyFinal	EntityValue =	l(U'\"') * ~( _EVCharRangeNoPercentLessDouble | PEReference | Reference )  * l(U'\"') |	// [9]
 													l(U'\'') * ~( _EVCharRangeNoPercentLessSingle | PEReference | Reference ) * l(U'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
  	_TyFinal	EntityDef = EntityValue | ( ExternalID * --NDataDecl ); //[73]
@@ -226,16 +244,16 @@ __REGEXP_OP_USING_NAMESPACE
 // [74]   	PEDef	   ::=   	EntityValue | ExternalID	
 
 #ifndef REGEXP_NO_TRIGGERS
-	// _TyFinal Test = ++l('a') * t(TyGetTriggerStandaloneYes<_TyCTok>()) * ++l('b');
+	// _TyFinal Test = ++l('a') * t(TyGetTriggerStandaloneYes<_TyLexT>()) * ++l('b');
 	// static const vtyActionIdent s_knTokenTest = 2000;
 	// typedef _l_action_token< _l_action_save_data_single< s_knTokenTest, true, TyGetTriggerStandaloneYes > > TyGetTokenTest;
-	// Test.SetAction( TyGetTokenTest<_TyCTok>() );
-	STag.SetAction( TyGetTokenSTag<_TyCTok>() );
-	ETag.SetAction( TyGetTokenETag<_TyCTok>() );
-	EmptyElemTag.SetAction( TyGetTokenEmptyElemTag<_TyCTok>() );
-	Comment.SetAction( TyGetTokenComment<_TyCTok>() );
-	XMLDecl.SetAction( TyGetTokenXMLDecl<_TyCTok>() );
-	CDSect.SetAction( TyGetTokenCDataSection<_TyCTok>() );
+	// Test.SetAction( TyGetTokenTest<_TyLexT>() );
+	STag.SetAction( TyGetTokenSTag<_TyLexT>() );
+	ETag.SetAction( TyGetTokenETag<_TyLexT>() );
+	EmptyElemTag.SetAction( TyGetTokenEmptyElemTag<_TyLexT>() );
+	Comment.SetAction( TyGetTokenComment<_TyLexT>() );
+	XMLDecl.SetAction( TyGetTokenXMLDecl<_TyLexT>() );
+	CDSect.SetAction( TyGetTokenCDataSection<_TyLexT>() );
 #else //!REGEXP_NO_TRIGGERS
 	STag.SetAction( _l_action_token< _TyCTok, 1 >() );
 	ETag.SetAction( _l_action_token< _TyCTok, 2 >() );
@@ -244,13 +262,12 @@ __REGEXP_OP_USING_NAMESPACE
 	XMLDecl.SetAction( _l_action_token< _TyCTok, 5 >() );
 #endif //!REGEXP_NO_TRIGGERS
 
-	// _TyFinal	All( Test );
-	_TyFinal	All( STag );
+	_TyFinal	All(STag );
 	All.AddRule( ETag );
 	All.AddRule( EmptyElemTag );
 	All.AddRule( Comment );
-	All.AddRule( XMLDecl );
-	All.AddRule( CDSect );
+	All.AddRule( PI );
+//	All.AddRule( CDSect );
 
 	// We will separate out "prolog" processing from the rest of the document.
 	// We should be able to have just two DFAs for the XML parsing: prolog and element.
@@ -262,6 +279,11 @@ __REGEXP_OP_USING_NAMESPACE
 
   try
   {
+		// Separate XMLDecl out into its own DFA since it clashes with processing instruction (PI).
+    _TyDfa dfaXMLDecl;
+    _TyDfaCtxt	dctxtXMLDecl(dfaXMLDecl);
+    gen_dfa(XMLDecl, dfaXMLDecl, dctxtXMLDecl);
+
     _TyDfa dfaAll;
     _TyDfaCtxt	dctxtAll(dfaAll);
     gen_dfa(All, dfaAll, dctxtAll);
@@ -271,6 +293,7 @@ __REGEXP_OP_USING_NAMESPACE
         "XMLPLEX", true, "ns_xmlplex",
         "state", "char32_t", "U'", "'");
     gen.add_dfa(dfaAll, dctxtAll, "startAll");
+    gen.add_dfa(dfaXMLDecl, dctxtXMLDecl, "startXMLDecl");
     gen.generate();
   }
   catch (exception const & _rex)
