@@ -125,10 +125,8 @@ TryMain( int argc, char ** argv )
 	_TyFinal	Reference = EntityRef | CharRef;	// [67]
 	// We use the same triggers for these just to save implementation space and because we know by the final trigger
 	//	whether a single or double quote was present.
-	_TyFinal _NotAmperLessDouble = lr(1,U'!') |  lr(U'#',U'%') | lr(U'\'',U';') | lr(U'=',0xD7FF) | lr(0xE000,0x10ffff); // == lnot("&<\"")
-	_TyFinal _NotAmperLessSingle = lr(1,U'%') |  lr(U'(',U';') | lr(U'=',0xD7FF) | lr(0xE000,0x10ffff); // == lnot("&<\'")
-	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++_NotAmperLessDouble * t(TyGetTriggerCharDataEnd<_TyLexT>());
-	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++_NotAmperLessSingle * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
+	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(U"&<\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
+	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++lnot(U"&<\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
 	// We need only record whether single or double quotes were used as a convenience to any reader/writer system that may want to duplicate the current manner of quoting.
 	_TyFinal	AttValue =	l(U'\"') * /* t( TyGetTriggerAttValueDoubleQuote<_TyLexT>() )  * */ ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(U'\"') |	// [10]
 												l(U'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(U'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
@@ -154,15 +152,16 @@ TryMain( int argc, char ** argv )
 // CDataSection:
 	// As with Comments we cannot use triggers in this production since the characters in "]]>" are also present in the production Char.
 	// There is no transition from character classes where the trigger could possibly fire.
-	//_TyFinal CDStart = ls(U"<![CDATA["); //[18]
-	//_TyFinal CDEnd = ls(U"]]>"); //[21]
-	//_TyFinal CDSect = ( CDStart * ~Char ) + CDEnd; 
-	_TyFinal CDStart = ls(U"<"); //[18]
+	_TyFinal CDStart = ls(U"<![CDATA["); //[18]
 	_TyFinal CDEnd = ls(U"]]>"); //[21]
-	_TyFinal CDSect = ( CDStart * ~lr(0x1,0x10ffff) ) + CDEnd; 
+	_TyFinal CDSect = CDStart * ~Char + CDEnd; 
 
 // CharData and/or references:
-//	_TyFinal CharDataAndReferences = ++( _AVCharRangeNoAmperLessDouble | Reference ) * ;
+	// We must have at least one character for the triggers to fire correctly.
+	// We can only use an ending position on this CharData production. Triggers at the beginning of a production do not work because they would fire everytime.
+	// This requires fixing up after the fact - easy to do - but also specific to the XML parser as we must know how to fix it up correctly and that will be specific to the XML parser.
+	_TyFinal CharData = ( ++lnot(U"<&") - ( ~lnot(U"<&") * ls(U"]]>") * ~lnot(U"<&") ) ) * t(TyGetTriggerCharDataEndpoint<_TyLexT>());	
+	_TyFinal CharDataAndReferences = ++( CharData | Reference );
 
 // prolog stuff:
 // XMLDecl and TextDecl(external DTDs):
@@ -234,9 +233,6 @@ TryMain( int argc, char ** argv )
 	_TyFinal 	doctypedecl_intSubset_end = l(U']') * --S * l(U'>');
 
 
-
-
-
 // [70]   	EntityDecl	   ::=   	GEDecl | PEDecl
 // [71]   	GEDecl	   ::=   	'<!ENTITY' S Name S EntityDef S? '>'
 // [72]   	PEDecl	   ::=   	'<!ENTITY' S '%' S Name S PEDef S? '>'
@@ -248,12 +244,14 @@ TryMain( int argc, char ** argv )
 	// static const vtyActionIdent s_knTokenTest = 2000;
 	// typedef _l_action_token< _l_action_save_data_single< s_knTokenTest, true, TyGetTriggerStandaloneYes > > TyGetTokenTest;
 	// Test.SetAction( TyGetTokenTest<_TyLexT>() );
+	XMLDecl.SetAction( TyGetTokenXMLDecl<_TyLexT>() );
 	STag.SetAction( TyGetTokenSTag<_TyLexT>() );
 	ETag.SetAction( TyGetTokenETag<_TyLexT>() );
 	EmptyElemTag.SetAction( TyGetTokenEmptyElemTag<_TyLexT>() );
 	Comment.SetAction( TyGetTokenComment<_TyLexT>() );
-	XMLDecl.SetAction( TyGetTokenXMLDecl<_TyLexT>() );
 	CDSect.SetAction( TyGetTokenCDataSection<_TyLexT>() );
+	CharDataAndReferences.SetAction( TyGetTokenCharData<_TyLexT>() );
+	PI.SetAction( TyGetTokenProcessingInstruction<_TyLexT>() );
 #else //!REGEXP_NO_TRIGGERS
 	STag.SetAction( _l_action_token< _TyCTok, 1 >() );
 	ETag.SetAction( _l_action_token< _TyCTok, 2 >() );
@@ -262,12 +260,13 @@ TryMain( int argc, char ** argv )
 	XMLDecl.SetAction( _l_action_token< _TyCTok, 5 >() );
 #endif //!REGEXP_NO_TRIGGERS
 
-	_TyFinal	All(STag );
+	_TyFinal All( STag );
 	All.AddRule( ETag );
 	All.AddRule( EmptyElemTag );
 	All.AddRule( Comment );
 	All.AddRule( PI );
-//	All.AddRule( CDSect );
+	All.AddRule( CharDataAndReferences );
+	All.AddRule( CDSect );
 
 	// We will separate out "prolog" processing from the rest of the document.
 	// We should be able to have just two DFAs for the XML parsing: prolog and element.
@@ -279,7 +278,7 @@ TryMain( int argc, char ** argv )
 
   try
   {
-		// Separate XMLDecl out into its own DFA since it clashes with processing instruction (PI).
+		 // Separate XMLDecl out into its own DFA since it clashes with processing instruction (PI).
     _TyDfa dfaXMLDecl;
     _TyDfaCtxt	dctxtXMLDecl(dfaXMLDecl);
     gen_dfa(XMLDecl, dfaXMLDecl, dctxtXMLDecl);
