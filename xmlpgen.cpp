@@ -3,6 +3,12 @@
 // dbien 25DEC2020
 // Generate the lexicographical analyzer for the xmlparser implementation using the lexang templates.
 
+#ifdef WIN32
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif //WIN32
+
 #include <memory>
 typedef std::allocator< char >	_TyDefaultAllocator;
 
@@ -40,6 +46,9 @@ int TryMain( int argc, char ** argv );
 int
 main( int argc, char **argv )
 {
+#ifdef WIN32
+	_CrtSetDbgFlag ( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
+#endif //WIN32
 	try
 	{
 		return TryMain( argc, argv );
