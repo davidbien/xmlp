@@ -307,6 +307,7 @@ TryMain( int argc, char ** argv )
   catch (exception const & _rex)
   {
     cerr << "xmlpgen: Caught exception [" << _rex.what() << "].\n";
+		return -1;
   }
 
 	return 0;
