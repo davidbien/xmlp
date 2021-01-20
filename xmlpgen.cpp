@@ -7,7 +7,14 @@
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
 #include <crtdbg.h>
-#endif //WIN32
+#ifndef NDEBUG
+    #define DBG_NEW new ( _NORMAL_BLOCK , __FILE__ , __LINE__ )
+#else
+    #define DBG_NEW new
+#endif
+#else //!WIN32
+#define DBG_NEW new
+#endif //!WIN32
 
 #include <memory>
 typedef std::allocator< char >	_TyDefaultAllocator;
