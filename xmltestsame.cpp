@@ -1,8 +1,8 @@
 
-// lexer.cpp
-// This is a simple test platform for a lexical analyzer.
+// xnltestsame.cpp
+// Unit test for XML Parser to check that we can exactly copy an XML file.
 // dbien
-// 1999->present.
+// 23JAN2021
 
 #ifdef WIN32
 #define _CRTDBG_MAP_ALLOC
@@ -29,7 +29,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include <fstream>
 #include "syslogmgr.inl"
 #include "_compat.inl"
-#include "xml_traits.h"
+#include "xml_inc.h"
 #include "_xmlplex.h"
 
 __BIENUTIL_USING_NAMESPACE
@@ -37,12 +37,11 @@ __BIENUTIL_USING_NAMESPACE
 std::string g_strProgramName;
 int TryMain( int argc, char ** argv );
 
-template < class t_TyAnalyzer, class t_PtrReturned >
-bool FTryGetToken( t_TyAnalyzer & _rA, t_PtrReturned & _rptrReturned );
-
 int
 main( int argc, char **argv )
 {
+#define USAGE "Usage: %s <input-file>"
+
 #ifdef WIN32
 	_set_error_mode( _OUT_TO_MSGBOX );	// Allow debugging after assert(). We use Assert() instead so this doesn't matter much.
 	_CrtSetDbgFlag( _CrtSetDbgFlag( _CRTDBG_REPORT_FLAG ) | _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
@@ -63,7 +62,7 @@ int
 TryMain( int argc, char ** argv )
 {
 	g_strProgramName = *argv;
-	n_SysLog::InitSysLog( argv[0],
+	n_SysLog::InitSysLog( argv[0],  
 #ifndef WIN32
 		/* LOG_PERROR */0, LOG_USER
 #else
