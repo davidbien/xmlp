@@ -30,6 +30,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "syslogmgr.inl"
 #include "_compat.inl"
 #include "xml_inc.h"
+#include "xml_tag.h"
 #include "_xmlplex.h"
 
 __BIENUTIL_USING_NAMESPACE
@@ -61,6 +62,7 @@ main( int argc, char **argv )
 int
 TryMain( int argc, char ** argv )
 {
+  #define USAGE "%s: Usage:\n%s <xml-file>\n"
 	g_strProgramName = *argv;
 	n_SysLog::InitSysLog( argv[0],  
 #ifndef WIN32
@@ -70,50 +72,49 @@ TryMain( int argc, char ** argv )
 #endif
 	);
 
+  if ( argc < 2 )
+  {
+    fprintf( stderr, USAGE, g_strProgramName.c_str(), g_strProgramName.c_str() );
+    return -1;
+  }
+
+  if ( !FFileExists( argv[1] ) )
+  {
+    fprintf( stderr, "%s: File does not exist[%s].\n", g_strProgramName.c_str(), argv[1] );
+    fprintf( stderr, USAGE, g_strProgramName.c_str(), g_strProgramName.c_str() );
+    return -2;
+  }
+
 	__XMLP_USING_NAMESPACE
 	__XMLPLEX_USING_NAMESPACE
 
-	typedef _l_transport_fixedmem< char32_t > _TyTransport;
+	typedef _l_transport_mapped< char32_t > _TyTransport;
 	typedef xml_traits< _TyTransport, false, false > _TyXmlTraits;
-	typedef typename _TyXmlTraits::_TyLexTraits _TyLexTraits;
-	typedef _TyLexTraits _TyLexT; // shorthand for below.
-	typedef TGetLexicalAnalyzer< _TyLexTraits > _TyMDAnalyzer;
-	typedef _TyMDAnalyzer::_TyToken _TyToken;
-	_TyMDAnalyzer	analyzer;
+  typedef xml_parser< _TyXmlTraits > _TyXmlParser;
+  typedef xml_read_cursor< _TyXmlTraits > _TyXmlReadCursor;
 
-  typedef basic_string< char, char_traits< char >, _TyDefaultAllocator > _TyStringChar;
+  _TyXmlParser xmlParser;
 
-  typedef typename _Alloc_traits< _TyMDAnalyzer::_TyChar, _TyDefaultAllocator >::allocator_type _TyStringCvtAllocator;
-  typedef basic_string< _TyMDAnalyzer::_TyChar, 
-                        char_traits< _TyMDAnalyzer::_TyChar >,
-                        _TyStringCvtAllocator > _TyStringCvt;
+  // Open the file:
+  try
+  {
+    xmlParser.emplaceTransport( argv[1] );
+  }
+  catch( const std::exception & rexc )
+  {
+		n_SysLog::Log( eslmtError, "%s: *** Exception: [%s]", g_strProgramName.c_str(), rexc.what() );
+		fprintf( stderr, "%s: *** Exception: [%s]\n", g_strProgramName.c_str(), rexc.what() );
+    fprintf( stderr, "%s: Unable to open file[%s].\n", g_strProgramName.c_str(), argv[1] );
+		return -3;
+  }
 
-	unique_ptr< _TyToken > upToken;
-  const int kiBufLen = 16384;
-	_TyStringChar	bs( kiBufLen, 0 );
-	while ( !cin.eof() )
-	{
-		cout << ">";
-		cout.flush();
-		bs.resize(kiBufLen, 0);
-		cin.getline( bs.data(), kiBufLen-1 );
-		bs.resize( StrNLen( bs.c_str() ) );
+  _TyXmlReadCursor xmlReadCursor;
+  xmlParser.AttachReadCursor( xmlReadCursor );
 
-		// Convert to the type we need it to be:
-		_TyStringCvt bsConvert( bs.begin(), bs.end() );
+  typedef xml_document< _TyXmlTraits > _TyXmlDocument;
+  _TyXmlDocument xmlDocument;
+  xmlDocument.FromXmlStream( xmlReadCursor );
 
-		analyzer.emplaceTransport( bsConvert.c_str(), bsConvert.length() );
-		while( FTryGetToken( analyzer, upToken ) )
-		{
-			upToken->GetValue().ProcessStrings< char >( *upToken );
-			JsoValue< char > jv;
-			upToken->GetValue().ToJsoValue( jv );
-			cout << "Got token: [" << upToken->GetTokenId() << "]\n" ;
-			cout << jv;
-			cout << "\n";
-		}
-	}
-	
 	return 0;
 }
 

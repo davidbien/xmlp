@@ -37,3 +37,16 @@ target_include_directories(lexer PUBLIC
 target_compile_definitions( lexer
   PUBLIC __NDEBUG_THROW
 )
+
+add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex.h )
+#setup internal submodule include directories.
+target_include_directories(xmltestsame PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
+  ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_compile_definitions( xmltestsame
+  PUBLIC __NDEBUG_THROW
+)
