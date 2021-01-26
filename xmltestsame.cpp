@@ -65,7 +65,10 @@ basic_string< t_TyCharDest > StrConvertFile( const char * _psz )
 	size_t stSize;
 	FileMappingObj fmo( MapReadOnlyHandle( fo.HFileGet(), &stSize ) );
 	VerifyThrowSz( fmo.FIsOpen(), "Couldn't map [%s].", _psz );
-	return StrConvertString< t_TyCharDest >( (const t_TyCharSrc *)fmo.Pv(), stSize / sizeof( t_TyCharSrc ) );
+  uint8_t byFirst = *(uint8_t*)fmo.Pv();
+  uint8_t bySecond = ((uint8_t*)fmo.Pv())[1];
+  uint8_t byThird = ((uint8_t*)fmo.Pv())[2];
+	return StrConvertString< t_TyCharDest >( (const t_TyCharSrc *)fmo.Pv() + 3, ( stSize / sizeof( t_TyCharSrc ) ) - 3 );
 }
 
 int
