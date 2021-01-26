@@ -41,8 +41,6 @@ int TryMain( int argc, char ** argv );
 int
 main( int argc, char **argv )
 {
-#define USAGE "Usage: %s <input-file>"
-
 #ifdef WIN32
 	_set_error_mode( _OUT_TO_MSGBOX );	// Allow debugging after assert(). We use Assert() instead so this doesn't matter much.
 	_CrtSetDbgFlag( _CrtSetDbgFlag( _CRTDBG_REPORT_FLAG ) | _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
