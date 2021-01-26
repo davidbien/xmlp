@@ -57,6 +57,17 @@ main( int argc, char **argv )
 	}
 }
 
+template < class t_TyCharDest, class t_TyCharSrc >
+basic_string< t_TyCharDest > StrConvertFile( const char * _psz )
+{
+	FileObj fo( OpenReadOnlyFile( _psz ) );
+	VerifyThrowSz( fo.FIsOpen(), "Couldn't open [%s].", _psz );
+	size_t stSize;
+	FileMappingObj fmo( MapReadOnlyHandle( fo.HFileGet(), &stSize ) );
+	VerifyThrowSz( fmo.FIsOpen(), "Couldn't map [%s].", _psz );
+	return StrConvertString< t_TyCharDest >( (const t_TyCharSrc *)fmo.Pv(), stSize / sizeof( t_TyCharSrc ) );
+}
+
 int
 TryMain( int argc, char ** argv )
 {
@@ -83,10 +94,12 @@ TryMain( int argc, char ** argv )
     return -2;
   }
 
+	basic_string< char32_t > str32File = StrConvertFile< char32_t, char >( argv[1] );
+
 	__XMLP_USING_NAMESPACE
 	__XMLPLEX_USING_NAMESPACE
 
-	typedef _l_transport_mapped< char32_t > _TyTransport;
+	typedef _l_transport_fixedmem< char32_t > _TyTransport;
 	typedef xml_traits< _TyTransport, false, false > _TyXmlTraits;
   typedef xml_parser< _TyXmlTraits > _TyXmlParser;
   typedef xml_read_cursor< _TyXmlTraits > _TyXmlReadCursor;
@@ -96,7 +109,7 @@ TryMain( int argc, char ** argv )
   // Open the file:
   try
   {
-    xmlParser.emplaceTransport( argv[1] );
+    xmlParser.emplaceTransport( &str32File[0], str32File.length() );
   }
   catch( const std::exception & rexc )
   {
