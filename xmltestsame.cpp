@@ -32,6 +32,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "xml_inc.h"
 #include "xml_tag.h"
 #include "_xmlplex.h"
+#include "gtest/gtest.h"
 
 __BIENUTIL_USING_NAMESPACE
 
@@ -55,20 +56,6 @@ main( int argc, char **argv )
 		fprintf( stderr, "%s: *** Exception: [%s]\n", g_strProgramName.c_str(), rexc.what() );
 		return -123;
 	}
-}
-
-template < class t_TyCharDest, class t_TyCharSrc >
-basic_string< t_TyCharDest > StrConvertFile( const char * _psz )
-{
-	FileObj fo( OpenReadOnlyFile( _psz ) );
-	VerifyThrowSz( fo.FIsOpen(), "Couldn't open [%s].", _psz );
-	size_t stSize;
-	FileMappingObj fmo( MapReadOnlyHandle( fo.HFileGet(), &stSize ) );
-	VerifyThrowSz( fmo.FIsOpen(), "Couldn't map [%s].", _psz );
-  uint8_t byFirst = *(uint8_t*)fmo.Pv();
-  uint8_t bySecond = ((uint8_t*)fmo.Pv())[1];
-  uint8_t byThird = ((uint8_t*)fmo.Pv())[2];
-	return StrConvertString< t_TyCharDest >( (const t_TyCharSrc *)fmo.Pv() + 3, ( stSize / sizeof( t_TyCharSrc ) ) - 3 );
 }
 
 int
