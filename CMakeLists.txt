@@ -38,12 +38,12 @@ target_compile_definitions( xmlpgen
 )
 
 add_custom_command(
-    OUTPUT  _xmlplex.h
+    OUTPUT  _xmlplex_utf32.h _xmlplex_utf16.h _xmlplex_utf8.h
     COMMAND xmlpgen
     DEPENDS xmlpgen
 )
 
-add_executable (lexer lexer.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex.h )
+add_executable (lexer lexer.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 #setup internal submodule include directories.
 target_include_directories(lexer PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
@@ -56,7 +56,7 @@ target_compile_definitions( lexer
   PUBLIC __NDEBUG_THROW
 )
 
-add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex.h )
+add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 #setup internal submodule include directories.
 target_include_directories(xmltestsame PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
@@ -69,6 +69,7 @@ target_compile_definitions( xmltestsame
   PUBLIC __NDEBUG_THROW
 )
 
+if (0)
 add_executable (xmlgtest xmlgtest.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex.h )
 target_include_directories(xmlgtest PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
@@ -84,3 +85,4 @@ gtest_discover_tests(xmlgtest
                     TEST_SUFFIX .withArgs
                     TEST_LIST   withArgsTests
 )
+endif (0)
