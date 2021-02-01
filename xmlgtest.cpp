@@ -31,7 +31,6 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "_compat.inl"
 #include "xml_inc.h"
 #include "xml_tag.h"
-#include "_xmlplex.h"
 #include "gtest/gtest.h"
 
 namespace ns_XMLGTest

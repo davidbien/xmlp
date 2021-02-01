@@ -85,9 +85,9 @@ TryMain( int argc, char ** argv )
 #endif //WIN32
 	);
 
-	//GenerateUTF32XmlLex( egfdStandaloneGenerator ); // egfdBaseGenerator
-	//GenerateUTF16XmlLex( egfdStandaloneGenerator ); // 
-	GenerateUTF8XmlLex( egfdStandaloneGenerator/*egfdSpecializedGenerator*/ );
+	GenerateUTF32XmlLex( egfdBaseGenerator );
+	GenerateUTF16XmlLex( egfdSpecializedGenerator );
+	GenerateUTF8XmlLex( egfdSpecializedGenerator );
 	return 0;
 }
 
@@ -301,11 +301,6 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	All.AddRule( CharDataAndReferences );
 	All.AddRule( CDSect );
 
-	// We will separate out "prolog" processing from the rest of the document.
-	// We should be able to have just two DFAs for the XML parsing: prolog and element.
-	// We will have to check on content (of course and as we would anyway) to make sure
-	//	that things appear in the right order, but that's easy.
-	
 	typedef _dfa< _TyCTok, _TyAllocator >	_TyDfa;
 	typedef _TyDfa::_TyDfaCtxt _TyDfaCtxt;
 
@@ -529,11 +524,6 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	All.AddRule( CharDataAndReferences );
 	All.AddRule( CDSect );
 
-	// We will separate out "prolog" processing from the rest of the document.
-	// We should be able to have just two DFAs for the XML parsing: prolog and element.
-	// We will have to check on content (of course and as we would anyway) to make sure
-	//	that things appear in the right order, but that's easy.
-	
 	typedef _dfa< _TyCTok, _TyAllocator >	_TyDfa;
 	typedef _TyDfa::_TyDfaCtxt _TyDfaCtxt;
 
@@ -578,17 +568,17 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 // Utility and multiple use non-triggered productions:
 	_TyFinal	S = ++( l(0x20) | l(0x09) | l(0x0d) | l(0x0a) ); // [3]
 	_TyFinal	Eq = --S * l(u8'=') * --S; // [25].
-	_TyFinal	Char =	l(0x09) | l(0x0a) | l(0x0d) | lr(0x20,0xff); // [2].
+	_TyFinal	Char =	l(0x09) | l(0x0a) | l(0x0d) | lr(0x20,0xFF); // [2].
 
 	_TyFinal NameStartChar = l(u8':') | lr(u8'A',u8'Z') | l(u8'_') | lr(u8'a',u8'z') | lr(0xC0,0xFF); // [4]
-	_TyFinal NameChar = NameStartChar | l(u8'-') | l(u8'.') | lr(u8'0',u8'9') | lr(0x80,0xFF);	// [4a]
+	_TyFinal NameChar = NameStartChar | l(u8'-') | l(u8'.') | lr(u8'0',u8'9') | lr(0x80,0xBF);	// [4a]
 	_TyFinal Name = NameStartChar * ~NameChar; // [5]
 	_TyFinal Names = Name * ~( S * Name ); // [6]
 	_TyFinal Nmtoken = ++NameChar;
 	_TyFinal Nmtokens = Nmtoken * ~( S * Nmtoken );
 
 	_TyFinal NameStartCharNoColon = lr(u8'A',u8'Z') | l(u8'_') | lr(u8'a',u8'z') | lr(0xC0,0xFF); // [4]
-	_TyFinal NameCharNoColon = NameStartCharNoColon | l(u8'-') | l(u8'.') | lr(u8'0',u8'9') | lr(0x80,0xFF);	// [4a]
+	_TyFinal NameCharNoColon = NameStartCharNoColon | l(u8'-') | l(u8'.') | lr(u8'0',u8'9') | lr(0x80,0xBF);	// [4a]
 	_TyFinal NCName = NameStartCharNoColon * ~NameCharNoColon;
 	_TyFinal	Prefix = NCName;
 	_TyFinal	LocalPart = NCName;
@@ -744,22 +734,17 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 #endif //!REGEXP_NO_TRIGGERS
 
 	_TyFinal All( STag );
-		All.AddRule( ETag );
-		All.AddRule( EmptyElemTag );
+	All.AddRule( ETag );
+	All.AddRule( EmptyElemTag );
 	All.AddRule( Comment );
-	//All.AddRule( PI );
-	//All.AddRule( CharDataAndReferences );
-	//All.AddRule( CDSect );
+	All.AddRule( PI );
+	All.AddRule( CharDataAndReferences );
+	All.AddRule( CDSect );
 
-	// We will separate out "prolog" processing from the rest of the document.
-	// We should be able to have just two DFAs for the XML parsing: prolog and element.
-	// We will have to check on content (of course and as we would anyway) to make sure
-	//	that things appear in the right order, but that's easy.
-	
 	typedef _dfa< _TyCTok, _TyAllocator >	_TyDfa;
 	typedef _TyDfa::_TyDfaCtxt _TyDfaCtxt;
 
-		// Separate XMLDecl out into its own DFA since it clashes with processing instruction (PI).
+	// Separate XMLDecl out into its own DFA since it clashes with processing instruction (PI).
 	_TyDfa dfaXMLDecl;
 	_TyDfaCtxt	dctxtXMLDecl(dfaXMLDecl);
 	gen_dfa(XMLDecl, dfaXMLDecl, dctxtXMLDecl);

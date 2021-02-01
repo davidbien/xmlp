@@ -31,7 +31,6 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "_compat.inl"
 #include "xml_inc.h"
 #include "xml_tag.h"
-#include "_xmlplex.h"
 #include "gtest/gtest.h"
 
 __BIENUTIL_USING_NAMESPACE
@@ -84,12 +83,14 @@ TryMain( int argc, char ** argv )
     return -2;
   }
 
-	basic_string< char32_t > str32File = StrConvertFile< char32_t, char >( argv[1] );
+	typedef char8_t _TyCharTest;
+
+	basic_string< _TyCharTest > strFile = StrConvertFile< _TyCharTest, char >( argv[1] );
 
 	__XMLP_USING_NAMESPACE
 	__XMLPLEX_USING_NAMESPACE
 
-	typedef _l_transport_fixedmem< char32_t > _TyTransport;
+	typedef _l_transport_fixedmem< _TyCharTest > _TyTransport;
 	typedef xml_traits< _TyTransport, false, false > _TyXmlTraits;
   typedef xml_parser< _TyXmlTraits > _TyXmlParser;
   typedef xml_read_cursor< _TyXmlTraits > _TyXmlReadCursor;
@@ -99,7 +100,7 @@ TryMain( int argc, char ** argv )
   // Open the file:
   try
   {
-    xmlParser.emplaceTransport( &str32File[0], str32File.length() );
+    xmlParser.emplaceTransport( &strFile[0], strFile.length() );
   }
   catch( const std::exception & rexc )
   {
