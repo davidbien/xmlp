@@ -84,8 +84,10 @@ namespace ns_XMLGTest
     {
       // 1) Open the file.
       // 2) Figure out the encoding of the file.
-      //    a) Potentially convert that encoding to an encoding we can read.
-      // 3) Instantiate the correct transport for that encoding.
+      // 3) Create all potential encodings of the file - i.e. UTF32, UTF16, and UTF8 big and little endian.
+      //  a) Write each encoding with and without a BOM.
+      // 4) Write all encodings in a directory in the output.
+      // 5) List all file names in this environment object in m_rgFileNamesTestDir.
       VerifyThrowSz( FFileExists( m_strFileName ), "File[%s] doesn't exist.", m_strFileName.c_str() );
       FileObj fo( OpenReadOnlyFile( m_strFileName.c_str() ) );
       VerifyThrowSz( fo.FIsOpen(), "Couldn't open file [%s]", m_strFileName.c_str() );
@@ -93,16 +95,33 @@ namespace ns_XMLGTest
       size_t nbyRead;
       int iResult = FileRead( fo.HFileGet(), rgbyBOM, vknBytesBOM, &nbyRead );
       Assert( !iResult );
-      Assert( nbyRead == vknBytesBOM );
+      Assert( nbyRead == vknBytesBOM ); // The smallest valid xml file is 4 bytes... "<t/>".
+      VerifyThrowSz( nbyRead == vknBytesBOM, "Unable to read [%lu] bytes from the file[%s].", vknBytesBOM, m_strFileName.c_str() );
+      m_fExpectFailure = m_strFileName.find("FAIL"); // simple method for detecting expected failures.
       EFileCharacterEncoding efceEncoding = efceFileCharacterEncodingCount;
       if ( !iResult && ( nbyRead == vknBytesBOM ) )
         efceEncoding = GetCharacterEncodingFromBOM( rgbyBOM, vknBytesBOM );
-      if ( efceFileCharacterEncodingCount == efceEncoding )
+      bool fEncodingFromBOM = ( efceFileCharacterEncodingCount != efceEncoding );
+      if ( !fEncodingFromBOM )
       {
         // Since we know we are opening XML we can use an easy heuristic to determine the encoding:
         efceEncoding = DetectEncodingXmlFile( rgbyBOM, vknBytesBOM );
         Assert( efceFileCharacterEncodingCount != efceEncoding ); // Unless the source isn't XML the above should succeed.
+        VerifyThrowSz( efceFileCharacterEncodingCount != efceEncoding, "Unable to sus encoding for the file[%s].", m_strFileName.c_str() );
       }
+      
+      size_t grfNeedFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
+      grfNeedFiles &= ~( ( 1 << efceEncoding ) << ( size_t(fEncodingFromBOM) * efceFileCharacterEncodingCount ) );
+      while( grfNeedFiles )
+      {
+        // This isn't as efficient as it could be but it feng shuis...
+        size_t stGenerate = _bv_get_clear_first_set( grfNeedFiles );
+        bool fWithBOM = stGenerate > efceFileCharacterEncodingCount;
+        EFileCharacterEncoding efceGenerate = EFileCharacterEncoding( stGenerate - ( fWithBOM ? efceFileCharacterEncodingCount : 0 ) );
+        
+    
+      }
+
 
 
        
@@ -113,9 +132,10 @@ namespace ns_XMLGTest
     {
     }
 
-    string m_strFileName;
+    string m_strFileNameOrig;
     bool m_fExpectFailure{false}; // If this is true then we expect the test to fail.
-    _TyStdStr m_strBackingBuffer; // If the file's character's type doesn't match the character type of the parser then we will convert.
+    typedef vector< string > _TyRgFileNamesTestDir;
+    _TyRgFileNamesTestDir m_rgFileNamesTestDir; // The resultant files that were written to the test directory in the output.
   };
 }
 
