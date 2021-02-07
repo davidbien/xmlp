@@ -25,6 +25,10 @@ enable_testing()
 
 include ( bienutil/bienutil.cmake )
 
+# create an output directory where we will create all of our unittest files based on the template unittest files that are in the source tree.
+add_custom_target(make-build-unittest-dir ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory "unittests")
+
 add_executable (xmlpgen "xmlpgen.cpp")
 
 target_include_directories(xmlpgen PUBLIC
@@ -56,6 +60,23 @@ target_compile_definitions( lexer
   PUBLIC __NDEBUG_THROW
 )
 
+add_executable (xmlgtest xmlgtest.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+target_include_directories(xmlgtest PUBLIC
+  ${CMAKE_CURRENT_BINARY_DIR}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
+)
+target_link_libraries(xmlgtest gtest gtest_main)
+
+gtest_discover_tests(xmlgtest
+                    EXTRA_ARGS  unittests/unittest1.xml
+                    TEST_SUFFIX .unittest1
+                    TEST_LIST   withArgsTests
+)
+
+if (0)
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 #setup internal submodule include directories.
 target_include_directories(xmltestsame PUBLIC
@@ -67,22 +88,5 @@ target_include_directories(xmltestsame PUBLIC
 )
 target_compile_definitions( xmltestsame
   PUBLIC __NDEBUG_THROW
-)
-
-if (0)
-add_executable (xmlgtest xmlgtest.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex.h )
-target_include_directories(xmlgtest PUBLIC
-  ${CMAKE_CURRENT_BINARY_DIR}
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
-)
-target_link_libraries(xmlgtest gtest gtest_main)
-
-gtest_discover_tests(xmlgtest
-                    EXTRA_ARGS  --someArg someValue
-                    TEST_SUFFIX .withArgs
-                    TEST_LIST   withArgsTests
 )
 endif (0)
