@@ -51,16 +51,18 @@ public:
 protected:
   void SetUp() override 
   {
+    // 0) Check if the caller used a slash that doesn't match the OS slash and substitute.
     // 1) Open the file.
     // 2) Figure out the encoding of the file. Also check if it is a failure scenario.
     // 3) Create all potential encodings of the file - i.e. UTF32, UTF16, and UTF8 big and little endian.
     //  a) Write each encoding with and without a BOM.
     // 4) Write all encodings in a unittest directory in the output.
     // 5) List all file names in this environment object in m_rgFileNamesTestDir.
+    const char kcSlash = ( string::npos == m_strFileNameOrig.find( TChGetFileSeparator<char>() ) ) ? TChGetOtherFileSeparator<char>() : TChGetFileSeparator<char>();
     VerifyThrowSz( FFileExists( m_strFileNameOrig.c_str() ), "Original test file[%s] doesn't exist.", m_strFileNameOrig.c_str() );
     size_t nPosXmlExt = m_strFileNameOrig.rfind( ".xml" );
     VerifyThrowSz( string::npos != nPosXmlExt, "File doesn't have an '.xml' extention [%s].", m_strFileNameOrig.c_str() );
-    size_t nPosPrevSlash = m_strFileNameOrig.rfind( TChGetFileSeparator<char>() );
+    size_t nPosPrevSlash = m_strFileNameOrig.rfind( kcSlash );
     VerifyThrowSz( string::npos != nPosPrevSlash, "Need full path to input file[%s] - couldn't find preceding slash.", m_strFileNameOrig.c_str() );
     VerifyThrowSz( nPosXmlExt > nPosPrevSlash+1, "uh that's not an acceptable file name [%s].", m_strFileNameOrig.c_str() );
     string strBaseFile("unittests");
@@ -168,7 +170,19 @@ public:
 };
 
 typedef XmlpTest<_l_transport_mapped> vTyTestMappedTransport;
-TEST_P( vTyTestMappedTransport, TestMappedFile )
+TEST_P( vTyTestMappedTransport, TestMappedTransport )
+{
+  _TyXmlParser xmlParser;
+  typedef _TyXmlParser::_TyXmlCursorVar _TyXmlCursorVar;
+  typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
+  typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+  _TyXmlCursorVar xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
+  _TyXmlDocVar xmlDocVar;
+  xmlDocVar.FromXmlStream( xmlReadCursor );
+}
+
+typedef XmlpTest<_l_transport_file> vTyTestFileTransport;
+TEST_P( vTyTestFileTransport, TestFileTransport )
 {
   _TyXmlParser xmlParser;
   typedef _TyXmlParser::_TyXmlCursorVar _TyXmlCursorVar;
@@ -180,9 +194,11 @@ TEST_P( vTyTestMappedTransport, TestMappedFile )
 }
 
 // Give us a set of 10 tests.
-INSTANTIATE_TEST_SUITE_P( TestXmlParser, vTyTestMappedTransport,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransport,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 int _TryMain( int argc, char **argv )
 {

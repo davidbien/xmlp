@@ -70,11 +70,16 @@ target_include_directories(xmlgtest PUBLIC
 )
 target_link_libraries(xmlgtest gtest gtest_main)
 
+# We may not notice new unittests until CMakeLists.txt is rebuilt - that's ok.
+file(GLOB XMLUNITTESTS LIST_DIRECTORIES true unittests/*.xml )
+foreach( XMLTEST ${XMLUNITTESTS} )
+get_filename_component( XMLTEST_NAME ${XMLTEST} NAME_WE )
+message("Unit test: ${XMLTEST_NAME}")    
 gtest_discover_tests(xmlgtest
-                    EXTRA_ARGS  unittests/unittest1.xml
-                    TEST_SUFFIX .unittest1
-                    TEST_LIST   withArgsTests
+                    EXTRA_ARGS  ${XMLTEST}
+                    TEST_SUFFIX .${XMLTEST_NAME}
 )
+endforeach()
 
 if (0)
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
