@@ -22,6 +22,7 @@
 typedef std::allocator< char >	_TyDefaultAllocator;
 
 #include "_compat.h"
+#include "_heapchk.h"
 
 // Include lexical analyzer:
 #include <string>

@@ -20,6 +20,7 @@
 typedef std::allocator< char >	_TyDefaultAllocator;
 
 #include "_compat.h"
+#include "_heapchk.h"
 
 #define _L_REGEXP_DEFAULTCHAR	char32_t
 #define __L_DEFAULT_ALLOCATOR _TyDefaultAllocator
