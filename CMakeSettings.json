@@ -22,7 +22,23 @@
       "buildCommandArgs": "",
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "msvc_x64_x64" ],
-      "variables": []
+      "variables": [
+        {
+          "name": "CMAKE_CXX_FLAGS_RELWITHDEBINFO",
+          "value": "/MT /Zi /Od /Ob0 /DNDEBUG                                          /bigobj",
+          "type": "STRING"
+        },
+        {
+          "name": "CMAKE_CXX_FLAGS_RELEASE",
+          "value": "/MT /O1 /Ob2 /DNDEBUG  /GL                                                           /bigobj",
+          "type": "STRING"
+        },
+        {
+          "name": "CMAKE_MODULE_LINKER_FLAGS_RELEASE",
+          "value": "/INCREMENTAL:NO /LTCG",
+          "type": "STRING"
+        }
+      ]
     }
   ]
 }

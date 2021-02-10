@@ -195,7 +195,7 @@ protected:
   }
 public:
   _TyMapTestFiles::const_iterator m_citTestFile;
-  bool m_fExpectFailure; // We should only succeed on two types of the ten for this test. On the others we expect failure. Also the test itself may be a failure type test.
+  bool m_fExpectFailure{false}; // We should only succeed on two types of the ten for this test. On the others we expect failure. Also the test itself may be a failure type test.
 };
 
 // We must, unfortunately, enumerate here:
@@ -280,7 +280,7 @@ protected:
   }
 public:
   _TyMapTestFiles::const_iterator m_citTestFile;
-  bool m_fExpectFailure;
+  bool m_fExpectFailure{false};
 };
 
 typedef XmlpTestVariant<_l_transport_mapped> vTyTestMappedTransport;

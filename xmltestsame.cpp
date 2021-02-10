@@ -85,13 +85,10 @@ TryMain( int argc, char ** argv )
   }
 
 	typedef char8_t _TyCharTest;
-
-	basic_string< _TyCharTest > strFile = StrConvertFile< _TyCharTest, char >( argv[1] );
-
 	__XMLP_USING_NAMESPACE
 	__XMLPLEX_USING_NAMESPACE
 
-	typedef _l_transport_fixedmem< _TyCharTest > _TyTransport;
+	typedef _l_transport_mapped< _TyCharTest > _TyTransport;
 	typedef xml_traits< _TyTransport, false, false > _TyXmlTraits;
   typedef xml_parser< _TyXmlTraits > _TyXmlParser;
   typedef xml_read_cursor< _TyXmlTraits > _TyXmlReadCursor;
@@ -99,21 +96,7 @@ TryMain( int argc, char ** argv )
   _TyXmlParser xmlParser;
 
   // Open the file:
-  try
-  {
-    xmlParser.emplaceTransport( &strFile[0], strFile.length() );
-  }
-  catch( const std::exception & rexc )
-  {
-		n_SysLog::Log( eslmtError, "%s: *** Exception: [%s]", g_strProgramName.c_str(), rexc.what() );
-		fprintf( stderr, "%s: *** Exception: [%s]\n", g_strProgramName.c_str(), rexc.what() );
-    fprintf( stderr, "%s: Unable to open file[%s].\n", g_strProgramName.c_str(), argv[1] );
-		return -3;
-  }
-
-  _TyXmlReadCursor xmlReadCursor;
-  xmlParser.AttachReadCursor( xmlReadCursor );
-
+	_TyXmlReadCursor xmlReadCursor = xmlParser.OpenFile( argv[1] );
   typedef xml_document< _TyXmlTraits > _TyXmlDocument;
   _TyXmlDocument xmlDocument;
   xmlDocument.FromXmlStream( xmlReadCursor );

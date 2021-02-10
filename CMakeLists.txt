@@ -81,7 +81,6 @@ gtest_discover_tests(xmlgtest
 )
 endforeach()
 
-if (0)
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 #setup internal submodule include directories.
 target_include_directories(xmltestsame PUBLIC
@@ -93,5 +92,6 @@ target_include_directories(xmltestsame PUBLIC
 )
 target_compile_definitions( xmltestsame
   PUBLIC __NDEBUG_THROW
+  PUBLIC TRACESENABLED=0
+  PUBLIC ASSERTSENABLED=0
 )
-endif (0)
