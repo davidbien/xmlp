@@ -163,9 +163,19 @@ protected:
     if ( !m_fExpectFailure )
     {
       // Then we have to check if this file is not the type we can load:
-      EFileCharacterEncoding efceTransport = _TyTransport::GetSupportedCharacterEncoding();
-      m_fExpectFailure = ( efceTransport != keyTestFile.first );
+      size_t grfSupportedTransports = _GrfSupportedTransports();
+      m_fExpectFailure = !( grfSupportedTransports & ( 1ull << keyTestFile.first ) );
     }
+  }
+  size_t _GrfSupportedTransports() const
+    requires( !TFIsTransportVar_v< _TyTransport > )
+  {
+    return ( 1ull << _TyTransport::GetSupportedCharacterEncoding() );
+  }
+  size_t _GrfSupportedTransports() const
+    requires( TFIsTransportVar_v< _TyTransport > )
+  {
+    return _TyTransport::GetSupportedEncodingBitVector();
   }
   // TearDown() is invoked immediately after a test finishes.
   void TearDown() override 
@@ -173,7 +183,7 @@ protected:
   }
   void TestParser()
   {
-    // If we expect to fail for this type of file then we will handle the excpetion locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
+    // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
     try
     {
       _TryTestParser();
@@ -190,6 +200,30 @@ protected:
     typedef xml_document< _TyXmlTraits > _TyXmlDocVar;
     _TyXmlParser xmlParser;
     _TyReadCursor xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
+    _TyXmlDocVar xmlDocVar;
+    xmlDocVar.FromXmlStream( xmlReadCursor );
+  }
+  template < template < class ... > class t_tempTransport >
+  void TestParserVarTransport()
+  {
+    // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
+    try
+    {
+      _TryTestParserVarTransport<t_tempTransport>();
+    }
+    catch( ... )
+    {
+      if ( !m_fExpectFailure )
+        throw;
+    }
+  }
+  template < template < class ... > class t_tempTransport >
+  void _TryTestParserVarTransport()
+  {
+    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef xml_document< _TyXmlTraits > _TyXmlDocVar;
+    _TyXmlParser xmlParser;
+    _TyReadCursor xmlReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
     _TyXmlDocVar xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
   }
@@ -225,15 +259,48 @@ INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF32_SE, vTyTestFileTranspo
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
 
-// XmlpTestVariant: This unit tests a single file in all possible formats - with and without BOM in the file.
+typedef _l_transport_var< _l_transport_file< char8_t, false_type >, _l_transport_mapped< char8_t, false_type >, _l_transport_fixedmem< char8_t, false_type > > vTyTransportVarChar8;
+typedef XmlpTestParser< xml_traits< vTyTransportVarChar8, false, false > > vTyTestVarTransportUTF8;
+TEST_P( vTyTestVarTransportUTF8, TestVarTransportUTF8 ) 
+{ 
+  // _l_transport_mapped is mostly the same as _l_transport_fixedmem so we don't really need to test _l_transport_fixedmem.
+  TestParserVarTransport< _l_transport_file >(); 
+  TestParserVarTransport< _l_transport_mapped >(); 
+}
+INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF8, vTyTestVarTransportUTF8,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+
+typedef _l_transport_var< _l_transport_file< char16_t, false_type >, _l_transport_file< char16_t, true_type >, _l_transport_mapped< char16_t, false_type >, _l_transport_mapped< char16_t, true_type >, 
+                          _l_transport_fixedmem< char16_t, false_type >, _l_transport_fixedmem< char16_t, true_type > > vTyTransportVarChar16;
+typedef XmlpTestParser< xml_traits< vTyTransportVarChar16, false, false > > vTyTestVarTransportUTF16;
+TEST_P( vTyTestVarTransportUTF16, TestVarTransportUTF16 ) 
+{ 
+  TestParserVarTransport< _l_transport_file >(); 
+  TestParserVarTransport< _l_transport_mapped >(); 
+}
+INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF16, vTyTestVarTransportUTF16,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+
+typedef _l_transport_var< _l_transport_file< char32_t, false_type >, _l_transport_file< char32_t, true_type >, _l_transport_mapped< char32_t, false_type >, _l_transport_mapped< char32_t, true_type >, 
+                          _l_transport_fixedmem< char32_t, false_type >, _l_transport_fixedmem< char32_t, true_type > > vTyTransportVarChar32;
+typedef XmlpTestParser< xml_traits< vTyTransportVarChar32, false, false > > vTyTestVarTransportUTF32;
+TEST_P( vTyTestVarTransportUTF32, TestVarTransportUTF32 ) 
+{ 
+  TestParserVarTransport< _l_transport_file >(); 
+  TestParserVarTransport< _l_transport_mapped >(); 
+}
+INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF32, vTyTestVarTransportUTF32,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+
+// XmlpTestVariantParser: This unit tests a single file in all possible formats - with and without BOM in the file.
 // The file is multiplexed by the XmlpTestEnvironment object and then is available as a "global" during
 //  the execution of the unittest.
 template <  template < class ... > class t_tempTyTransport, 
             class t_TyTp2DCharPack = tuple< tuple< char32_t, true_type >, tuple< char32_t, false_type >, tuple< char16_t, true_type >, tuple< char16_t, false_type >, tuple< char8_t, false_type > > >
             //class t_TyTp2DCharPack = tuple< tuple< char8_t, false_type > > >
-class XmlpTestVariant : public testing::TestWithParam< std::tuple< bool, int > >
+class XmlpTestVariantParser : public testing::TestWithParam< std::tuple< bool, int > >
 {
-  typedef XmlpTestVariant _TyThis;
+  typedef XmlpTestVariantParser _TyThis;
   typedef testing::Test _TyBase;
 public:
   typedef t_TyTp2DCharPack _TyTp2DCharPack;
@@ -257,7 +324,7 @@ protected:
   }
   void TestParser()
   {
-    // If we expect to fail for this type of file then we will handle the excpetion locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
+    // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
     try
     {
       _TryTestParser();
@@ -283,13 +350,13 @@ public:
   bool m_fExpectFailure{false};
 };
 
-typedef XmlpTestVariant<_l_transport_mapped> vTyTestMappedTransport;
+typedef XmlpTestVariantParser<_l_transport_mapped> vTyTestMappedTransport;
 TEST_P( vTyTestMappedTransport, TestMappedTransport )
 {
   TestParser();
 }
 
-typedef XmlpTestVariant<_l_transport_file> vTyTestFileTransport;
+typedef XmlpTestVariantParser<_l_transport_file> vTyTestFileTransport;
 TEST_P( vTyTestFileTransport, TestFileTransport )
 {
   TestParser();
@@ -301,6 +368,9 @@ INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransport,
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
 INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+
+// Test variant transport with the variant parser since that hits all scenarios.
+
 
 int _TryMain( int argc, char **argv )
 {

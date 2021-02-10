@@ -30,12 +30,7 @@
         },
         {
           "name": "CMAKE_CXX_FLAGS_RELEASE",
-          "value": "/MT /O1 /Ob2 /DNDEBUG  /GL                                                           /bigobj",
-          "type": "STRING"
-        },
-        {
-          "name": "CMAKE_MODULE_LINKER_FLAGS_RELEASE",
-          "value": "/INCREMENTAL:NO /LTCG",
+          "value": "/MT /O2 /DNDEBUG                                                    /bigobj",
           "type": "STRING"
         }
       ]
