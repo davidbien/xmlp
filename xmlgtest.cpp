@@ -77,7 +77,7 @@ protected:
     Assert( !iResult );
     Assert( nbyLenghtBOM == vknBytesBOM ); // The smallest valid xml file is 4 bytes... "<t/>".
     VerifyThrowSz( nbyLenghtBOM == vknBytesBOM, "Unable to read [%lu] bytes from the file[%s].", vknBytesBOM, m_strFileNameOrig.c_str() );
-    m_fExpectFailure = m_strFileNameOrig.find("FAIL"); // simple method for detecting expected failures.
+    m_fExpectFailure = ( string::npos != m_strFileNameOrig.find("FAIL") ); // simple method for detecting expected failures.
     EFileCharacterEncoding efceEncoding = efceFileCharacterEncodingCount;
     if ( !iResult && ( nbyLenghtBOM == vknBytesBOM ) )
       efceEncoding = GetCharacterEncodingFromBOM( rgbyBOM, nbyLenghtBOM );
@@ -264,8 +264,8 @@ typedef XmlpTestParser< xml_traits< vTyTransportVarChar8, false, false > > vTyTe
 TEST_P( vTyTestVarTransportUTF8, TestVarTransportUTF8 ) 
 { 
   // _l_transport_mapped is mostly the same as _l_transport_fixedmem so we don't really need to test _l_transport_fixedmem.
-  TestParserVarTransport< _l_transport_file >(); 
   TestParserVarTransport< _l_transport_mapped >(); 
+  TestParserVarTransport< _l_transport_file >(); 
 }
 INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF8, vTyTestVarTransportUTF8,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
@@ -275,8 +275,8 @@ typedef _l_transport_var< _l_transport_file< char16_t, false_type >, _l_transpor
 typedef XmlpTestParser< xml_traits< vTyTransportVarChar16, false, false > > vTyTestVarTransportUTF16;
 TEST_P( vTyTestVarTransportUTF16, TestVarTransportUTF16 ) 
 { 
-  TestParserVarTransport< _l_transport_file >(); 
   TestParserVarTransport< _l_transport_mapped >(); 
+  TestParserVarTransport< _l_transport_file >(); 
 }
 INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF16, vTyTestVarTransportUTF16,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
@@ -286,8 +286,8 @@ typedef _l_transport_var< _l_transport_file< char32_t, false_type >, _l_transpor
 typedef XmlpTestParser< xml_traits< vTyTransportVarChar32, false, false > > vTyTestVarTransportUTF32;
 TEST_P( vTyTestVarTransportUTF32, TestVarTransportUTF32 ) 
 { 
-  TestParserVarTransport< _l_transport_file >(); 
   TestParserVarTransport< _l_transport_mapped >(); 
+  TestParserVarTransport< _l_transport_file >(); 
 }
 INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF32, vTyTestVarTransportUTF32,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
