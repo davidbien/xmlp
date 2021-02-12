@@ -32,6 +32,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "_compat.inl"
 #include "xml_inc.h"
 #include "xml_tag.h"
+#include "xml_tag_var.h"
 #include "gtest/gtest.h"
 
 __BIENUTIL_USING_NAMESPACE
@@ -88,16 +89,13 @@ TryMain( int argc, char ** argv )
 	__XMLP_USING_NAMESPACE
 	__XMLPLEX_USING_NAMESPACE
 
-	typedef _l_transport_mapped< _TyCharTest > _TyTransport;
-	typedef xml_traits< _TyTransport, false, false > _TyXmlTraits;
-  typedef xml_parser< _TyXmlTraits > _TyXmlParser;
-  typedef xml_read_cursor< _TyXmlTraits > _TyXmlReadCursor;
-
+	typedef xml_parser_var< xml_var_get_var_transport_t, tuple< tuple< char8_t >, tuple< char16_t >/*, tuple< char32_t >*/ > > _TyXmlParser;
+	typedef _TyXmlParser::_TyReadCursorVar _TyXmlReadCursor;
   _TyXmlParser xmlParser;
 
   // Open the file:
-	_TyXmlReadCursor xmlReadCursor = xmlParser.OpenFile( argv[1] );
-  typedef xml_document< _TyXmlTraits > _TyXmlDocument;
+	_TyXmlReadCursor xmlReadCursor = xmlParser.OpenFileVar< _l_transport_file >( argv[1] );
+  typedef xml_document_var< _TyXmlParser::_TyTpTransports > _TyXmlDocument;
   _TyXmlDocument xmlDocument;
   xmlDocument.FromXmlStream( xmlReadCursor );
 
