@@ -197,11 +197,12 @@ protected:
   void _TryTestParser()
   {
     typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
-    typedef xml_document< _TyXmlTraits > _TyXmlDocVar;
+    typedef xml_document< _TyXmlTraits > _TyXmlDoc;
     _TyXmlParser xmlParser;
     _TyReadCursor xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
-    _TyXmlDocVar xmlDocVar;
+    _TyXmlDoc xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
+    VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
   }
   template < template < class ... > class t_tempTransport >
   void TestParserVarTransport()
@@ -221,11 +222,12 @@ protected:
   void _TryTestParserVarTransport()
   {
     typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
-    typedef xml_document< _TyXmlTraits > _TyXmlDocVar;
+    typedef xml_document< _TyXmlTraits > _TyXmlDoc;
     _TyXmlParser xmlParser;
     _TyReadCursor xmlReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
-    _TyXmlDocVar xmlDocVar;
+    _TyXmlDoc xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
+    VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
   }
 public:
   _TyMapTestFiles::const_iterator m_citTestFile;
@@ -344,33 +346,65 @@ protected:
     _TyReadCursorVar xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
     _TyXmlDocVar xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
+    VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
+  }
+  template < template < class ... > class t_tempTransport >
+  void TestParserVarTransport()
+  {
+    // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
+    try
+    {
+      _TryTestParserVarTransport<t_tempTransport>();
+    }
+    catch( ... )
+    {
+      if ( !m_fExpectFailure )
+        throw;
+    }
+  }
+  template < template < class ... > class t_tempTransport >
+  void _TryTestParserVarTransport()
+  {
+    _TyXmlParser xmlParser;
+    typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
+    typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
+    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+    _TyReadCursorVar xmlReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+    _TyXmlDocVar xmlDocVar;
+    xmlDocVar.FromXmlStream( xmlReadCursor );
+    VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
   }
 public:
   _TyMapTestFiles::const_iterator m_citTestFile;
   bool m_fExpectFailure{false};
 };
 
-typedef XmlpTestVariantParser<_l_transport_mapped> vTyTestMappedTransport;
-TEST_P( vTyTestMappedTransport, TestMappedTransport )
+typedef XmlpTestVariantParser<_l_transport_mapped> vTyTestVarParserMappedTransport;
+TEST_P( vTyTestVarParserMappedTransport, TestVarParserMappedTransport )
 {
   TestParser();
 }
-
-typedef XmlpTestVariantParser<_l_transport_file> vTyTestFileTransport;
-TEST_P( vTyTestFileTransport, TestFileTransport )
+typedef XmlpTestVariantParser<_l_transport_file> vTyTestVarParserFileTransport;
+TEST_P( vTyTestVarParserFileTransport, TestVarParserFileTransport )
 {
   TestParser();
 }
-
 // Give us a set of 10 tests.
-INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransport,
+INSTANTIATE_TEST_SUITE_P( TestXmlVarParserMappedTransport, vTyTestVarParserMappedTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransport,
+INSTANTIATE_TEST_SUITE_P( TestXmlVarParserFileTransport, vTyTestVarParserFileTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
-// Test variant transport with the variant parser since that hits all scenarios.
-
+// Test variant transport with the variant parser.
+typedef XmlpTestVariantParser< xml_var_get_var_transport_t, tuple< tuple< char8_t >, tuple< char16_t >, tuple< char32_t > > > vTyTestVarParserVarTransport;
+TEST_P( vTyTestVarParserVarTransport, TestVarParserVarTransport )
+{
+  TestParserVarTransport<_l_transport_mapped>();
+  TestParserVarTransport<_l_transport_file>();
+}
+INSTANTIATE_TEST_SUITE_P( TestXmlVarParserVarTransport, vTyTestVarParserVarTransport,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 int _TryMain( int argc, char **argv )
 {
