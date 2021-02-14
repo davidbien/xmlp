@@ -137,6 +137,15 @@ using ::testing::Bool;
 using ::testing::Values;
 using ::testing::Combine;
 
+void MapFileForMemoryTest( const char * _pszFileName, FileMappingObj & _rfmo, size_t & _nbyBytesFile )
+{
+  FileObj fo( OpenReadOnlyFile( _pszFileName ) );
+  VerifyThrowSz( fo.FIsOpen(), "Couldn't open file [%s]", _pszFileName );
+  FileMappingObj fmo( MapReadOnlyHandle( fo.HFileGet(), &_nbyBytesFile ) );
+  VerifyThrowSz( fmo.FIsOpen(), "Couldn't map file [%s]", _pszFileName );
+  _rfmo = std::move( fmo );
+}
+
 // XmlpTestParser:
 // This just tests a single type of the non-variant parser. It will reject files that it knows aren't in the right config - appropriately.
 template < class t_TyXmlTraits >
@@ -181,12 +190,12 @@ protected:
   void TearDown() override 
   {
   }
-  void TestParser()
+  void TestParserFile()
   {
     // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
     try
     {
-      _TryTestParser();
+      _TryTestParserFile();
     }
     catch( ... )
     {
@@ -194,7 +203,7 @@ protected:
         throw;
     }
   }
-  void _TryTestParser()
+  void _TryTestParserFile()
   {
     typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
@@ -205,12 +214,12 @@ protected:
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
   }
   template < template < class ... > class t_tempTransport >
-  void TestParserVarTransport()
+  void TestParserFileTransportVar()
   {
     // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
     try
     {
-      _TryTestParserVarTransport<t_tempTransport>();
+      _TryTestParserFileTransportVar<t_tempTransport>();
     }
     catch( ... )
     {
@@ -219,7 +228,7 @@ protected:
     }
   }
   template < template < class ... > class t_tempTransport >
-  void _TryTestParserVarTransport()
+  void _TryTestParserFileTransportVar()
   {
     typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
@@ -229,24 +238,78 @@ protected:
     xmlDocVar.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
   }
+  void TestParserMemory()
+  {
+    // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
+    try
+    {
+      _TryTestParserMemory();
+    }
+    catch( ... )
+    {
+      if ( !m_fExpectFailure )
+        throw;
+    }
+  }
+  void _TryTestParserMemory()
+  {
+    FileMappingObj fmo;
+    size_t nbySizeBytes;
+    MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
+    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef xml_document< _TyXmlTraits > _TyXmlDoc;
+    _TyXmlParser xmlParser;
+    _TyReadCursor xmlReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
+    _TyXmlDoc xmlDocVar;
+    xmlDocVar.FromXmlStream( xmlReadCursor );
+    VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
+  }
+  template < template < class ... > class t_tempTransport >
+  void TestParserMemoryTransportVar()
+  {
+    // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
+    try
+    {
+      _TryTestParserMemoryTransportVar<t_tempTransport>();
+    }
+    catch( ... )
+    {
+      if ( !m_fExpectFailure )
+        throw;
+    }
+  }
+  template < template < class ... > class t_tempTransport >
+  void _TryTestParserMemoryTransportVar()
+  {
+    FileMappingObj fmo;
+    size_t nbySizeBytes;
+    MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
+    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef xml_document< _TyXmlTraits > _TyXmlDoc;
+    _TyXmlParser xmlParser;
+    _TyReadCursor xmlReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+    _TyXmlDoc xmlDocVar;
+    xmlDocVar.FromXmlStream( xmlReadCursor );
+    VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
+  }
 public:
   _TyMapTestFiles::const_iterator m_citTestFile;
   bool m_fExpectFailure{false}; // We should only succeed on two types of the ten for this test. On the others we expect failure. Also the test itself may be a failure type test.
 };
 
-// We must, unfortunately, enumerate here:
-typedef XmlpTestParser< xml_traits< _l_transport_file< char8_t, false_type >, false, false > > vTyTestFileTransportUTF8;
-TEST_P( vTyTestFileTransportUTF8, TestFileTransportUTF8 ) { TestParser(); }
+// Test single transport type parser types: 1) Files.
 // NSE: NoSwitchEndian: ends up being UTF16LE on a little endian machine.
 // SE: SwitchEndian
+typedef XmlpTestParser< xml_traits< _l_transport_file< char8_t, false_type >, false, false > > vTyTestFileTransportUTF8;
+TEST_P( vTyTestFileTransportUTF8, TestFileTransportUTF8 ) { TestParserFile(); }
 typedef XmlpTestParser< xml_traits< _l_transport_file< char16_t, false_type >, false, false > > vTyTestFileTransportUTF16_NSE;
-TEST_P( vTyTestFileTransportUTF16_NSE, TestFileTransportUTF16 ) { TestParser(); }
+TEST_P( vTyTestFileTransportUTF16_NSE, TestFileTransportUTF16 ) { TestParserFile(); }
 typedef XmlpTestParser< xml_traits< _l_transport_file< char16_t, false_type >, false, false > > vTyTestFileTransportUTF16_SE;
-TEST_P( vTyTestFileTransportUTF16_SE, TestFileTransportUTF16 ) { TestParser(); }
+TEST_P( vTyTestFileTransportUTF16_SE, TestFileTransportUTF16 ) { TestParserFile(); }
 typedef XmlpTestParser< xml_traits< _l_transport_file< char32_t, false_type >, false, false > > vTyTestFileTransportUTF32_NSE;
-TEST_P( vTyTestFileTransportUTF32_NSE, TestFileTransportUTF32 ) { TestParser(); }
+TEST_P( vTyTestFileTransportUTF32_NSE, TestFileTransportUTF32 ) { TestParserFile(); }
 typedef XmlpTestParser< xml_traits< _l_transport_file< char32_t, false_type >, false, false > > vTyTestFileTransportUTF32_SE;
-TEST_P( vTyTestFileTransportUTF32_SE, TestFileTransportUTF32 ) { TestParser(); }
+TEST_P( vTyTestFileTransportUTF32_SE, TestFileTransportUTF32 ) { TestParserFile(); }
 
 // Give us a set of 10 tests for each scenario above. 8 of those tests will fail appropriately (or not if there is a bug).
 INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF8, vTyTestFileTransportUTF8,
@@ -260,14 +323,39 @@ INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF32_NSE, vTyTestFileTransp
 INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF32_SE, vTyTestFileTransportUTF32_SE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
+// 2) Memory.
+typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char8_t, false_type >, false, false > > vTyTestMemoryTransportUTF8;
+TEST_P( vTyTestMemoryTransportUTF8, TestMemoryTransportUTF8 ) { TestParserMemory(); }
+typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char16_t, false_type >, false, false > > vTyTestMemoryTransportUTF16_NSE;
+TEST_P( vTyTestMemoryTransportUTF16_NSE, TestMemoryTransportUTF16 ) { TestParserMemory(); }
+typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char16_t, false_type >, false, false > > vTyTestMemoryTransportUTF16_SE;
+TEST_P( vTyTestMemoryTransportUTF16_SE, TestMemoryTransportUTF16 ) { TestParserMemory(); }
+typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char32_t, false_type >, false, false > > vTyTestMemoryTransportUTF32_NSE;
+TEST_P( vTyTestMemoryTransportUTF32_NSE, TestMemoryTransportUTF32 ) { TestParserMemory(); }
+typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char32_t, false_type >, false, false > > vTyTestMemoryTransportUTF32_SE;
+TEST_P( vTyTestMemoryTransportUTF32_SE, TestMemoryTransportUTF32 ) { TestParserMemory(); }
+
+// Give us a set of 10 tests for each scenario above. 8 of those tests will fail appropriately (or not if there is a bug).
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF8, vTyTestMemoryTransportUTF8,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF16_NSE, vTyTestMemoryTransportUTF16_NSE,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF16_SE, vTyTestMemoryTransportUTF16_SE,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF32_NSE, vTyTestMemoryTransportUTF32_NSE,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF32_SE, vTyTestMemoryTransportUTF32_SE,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+
 
 typedef _l_transport_var< _l_transport_file< char8_t, false_type >, _l_transport_mapped< char8_t, false_type >, _l_transport_fixedmem< char8_t, false_type > > vTyTransportVarChar8;
 typedef XmlpTestParser< xml_traits< vTyTransportVarChar8, false, false > > vTyTestVarTransportUTF8;
 TEST_P( vTyTestVarTransportUTF8, TestVarTransportUTF8 ) 
 { 
   // _l_transport_mapped is mostly the same as _l_transport_fixedmem so we don't really need to test _l_transport_fixedmem.
-  TestParserVarTransport< _l_transport_mapped >(); 
-  TestParserVarTransport< _l_transport_file >(); 
+  TestParserFileTransportVar< _l_transport_mapped >(); 
+  TestParserFileTransportVar< _l_transport_file >(); 
+  TestParserMemoryTransportVar< _l_transport_fixedmem >();
 }
 INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF8, vTyTestVarTransportUTF8,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
@@ -277,8 +365,9 @@ typedef _l_transport_var< _l_transport_file< char16_t, false_type >, _l_transpor
 typedef XmlpTestParser< xml_traits< vTyTransportVarChar16, false, false > > vTyTestVarTransportUTF16;
 TEST_P( vTyTestVarTransportUTF16, TestVarTransportUTF16 ) 
 { 
-  TestParserVarTransport< _l_transport_mapped >(); 
-  TestParserVarTransport< _l_transport_file >(); 
+  TestParserFileTransportVar< _l_transport_mapped >(); 
+  TestParserFileTransportVar< _l_transport_file >(); 
+  TestParserMemoryTransportVar< _l_transport_fixedmem >();
 }
 INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF16, vTyTestVarTransportUTF16,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
@@ -288,8 +377,9 @@ typedef _l_transport_var< _l_transport_file< char32_t, false_type >, _l_transpor
 typedef XmlpTestParser< xml_traits< vTyTransportVarChar32, false, false > > vTyTestVarTransportUTF32;
 TEST_P( vTyTestVarTransportUTF32, TestVarTransportUTF32 ) 
 { 
-  TestParserVarTransport< _l_transport_mapped >(); 
-  TestParserVarTransport< _l_transport_file >(); 
+  TestParserFileTransportVar< _l_transport_mapped >(); 
+  TestParserFileTransportVar< _l_transport_file >();
+  TestParserMemoryTransportVar< _l_transport_fixedmem >();
 }
 INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF32, vTyTestVarTransportUTF32,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
@@ -324,12 +414,12 @@ protected:
   void TearDown() override 
   {
   }
-  void TestParser()
+  void TestParserFile()
   {
     // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
     try
     {
-      _TryTestParser();
+      _TryTestParserFile();
     }
     catch( ... )
     {
@@ -337,7 +427,7 @@ protected:
         throw;
     }
   }
-  void _TryTestParser()
+  void _TryTestParserFile()
   {
     _TyXmlParser xmlParser;
     typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
@@ -349,12 +439,12 @@ protected:
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
   }
   template < template < class ... > class t_tempTransport >
-  void TestParserVarTransport()
+  void TestParserFileTransportVar()
   {
     // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
     try
     {
-      _TryTestParserVarTransport<t_tempTransport>();
+      _TryTestParserFileTransportVar<t_tempTransport>();
     }
     catch( ... )
     {
@@ -363,13 +453,69 @@ protected:
     }
   }
   template < template < class ... > class t_tempTransport >
-  void _TryTestParserVarTransport()
+  void _TryTestParserFileTransportVar()
   {
     _TyXmlParser xmlParser;
     typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
     typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
     typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
     _TyReadCursorVar xmlReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+    _TyXmlDocVar xmlDocVar;
+    xmlDocVar.FromXmlStream( xmlReadCursor );
+    VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
+  }
+  void TestParserMemory()
+  {
+    // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
+    try
+    {
+      _TryTestParserMemory();
+    }
+    catch( ... )
+    {
+      if ( !m_fExpectFailure )
+        throw;
+    }
+  }
+  void _TryTestParserMemory()
+  {
+    FileMappingObj fmo;
+    size_t nbySizeBytes;
+    MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
+    _TyXmlParser xmlParser;
+    typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
+    typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
+    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+    _TyReadCursorVar xmlReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
+    _TyXmlDocVar xmlDocVar;
+    xmlDocVar.FromXmlStream( xmlReadCursor );
+    VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
+  }
+  template < template < class ... > class t_tempTransport >
+  void TestParserMemoryTransportVar()
+  {
+    // If we expect to fail for this type of file then we will handle the exception locally, otherwise throw it on to the infrastructure because it will then record the failure appropriately.
+    try
+    {
+      _TryTestParserMemoryTransportVar<t_tempTransport>();
+    }
+    catch( ... )
+    {
+      if ( !m_fExpectFailure )
+        throw;
+    }
+  }
+  template < template < class ... > class t_tempTransport >
+  void _TryTestParserMemoryTransportVar()
+  {
+    FileMappingObj fmo;
+    size_t nbySizeBytes;
+    MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
+    _TyXmlParser xmlParser;
+    typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
+    typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
+    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+    _TyReadCursorVar xmlReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
     _TyXmlDocVar xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
@@ -382,26 +528,34 @@ public:
 typedef XmlpTestVariantParser<_l_transport_mapped> vTyTestVarParserMappedTransport;
 TEST_P( vTyTestVarParserMappedTransport, TestVarParserMappedTransport )
 {
-  TestParser();
+  TestParserFile();
 }
 typedef XmlpTestVariantParser<_l_transport_file> vTyTestVarParserFileTransport;
 TEST_P( vTyTestVarParserFileTransport, TestVarParserFileTransport )
 {
-  TestParser();
+  TestParserFile();
 }
-// Give us a set of 10 tests.
+typedef XmlpTestVariantParser<_l_transport_fixedmem> vTyTestVarParserMemoryTransport;
+TEST_P( vTyTestVarParserMemoryTransport, TestVarParserMemoryTransport )
+{
+  TestParserMemory();
+}
+// Give us some tests.
 INSTANTIATE_TEST_SUITE_P( TestXmlVarParserMappedTransport, vTyTestVarParserMappedTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
 INSTANTIATE_TEST_SUITE_P( TestXmlVarParserFileTransport, vTyTestVarParserFileTransport,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlVarParserMemoryTransport, vTyTestVarParserMemoryTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 // Test variant transport with the variant parser.
 typedef XmlpTestVariantParser< xml_var_get_var_transport_t, tuple< tuple< char8_t >, tuple< char16_t >, tuple< char32_t > > > vTyTestVarParserVarTransport;
 TEST_P( vTyTestVarParserVarTransport, TestVarParserVarTransport )
 {
-  TestParserVarTransport<_l_transport_mapped>();
-  TestParserVarTransport<_l_transport_file>();
+  TestParserFileTransportVar<_l_transport_mapped>();
+  TestParserFileTransportVar<_l_transport_file>();
+  TestParserMemoryTransportVar<_l_transport_fixedmem>();
 }
 INSTANTIATE_TEST_SUITE_P( TestXmlVarParserVarTransport, vTyTestVarParserVarTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
