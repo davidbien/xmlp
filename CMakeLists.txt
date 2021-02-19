@@ -29,7 +29,7 @@ include ( bienutil/bienutil.cmake )
 add_custom_target(make-build-unittest-dir ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory "unittests")
 
-add_executable (xmlpgen "xmlpgen.cpp")
+add_executable (xmlpgen "xmlpgen.cpp" "xmlpgen.h" "xmlpgen_utf32.cpp" "xmlpgen_utf16.cpp" "xmlpgen_utf8.cpp" )
 
 target_include_directories(xmlpgen PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
