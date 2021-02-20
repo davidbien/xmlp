@@ -92,7 +92,7 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyFinal	PI = ls(U"<?")	* t( TyGetTriggerPITargetStart<_TyLexT>() ) * PITarget * t( TyGetTriggerPITargetEnd<_TyLexT>() )
 			* ( ls(U"?>") | ( S * t( TyGetTriggerPITargetMeatBegin<_TyLexT>() ) * ( PITargetMeat + ls(U"?>") ) ) );
 	// For output validation we need to ensure that we don't encounter a "?>" in the midst of the PITargetMeat:
-	_TyFinal	PITargetMeatOutputValidate = ~Char - ( ~Char * ls(U"?>") );
+	_TyFinal	PITargetMeatOutputValidate = ~Char - ( ~Char * ls(U"?>") * ~Char );
 
 // Comment:
 	_TyFinal	_CharNoMinus =	l(0x09) | l(0x0a) | l(0x0d) | // [2].
@@ -107,8 +107,8 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyFinal CDStart = ls(U"<![CDATA["); //[18]
 	_TyFinal CDEnd = ls(U"]]>"); //[21]
 	_TyFinal CDSect = CDStart * ~Char + CDEnd; 
-  // As with CharData output validation we need a separate production that finds any contained "]]>" quickly so we can escape it appropriately.
-  _TyFinal CDCharsOutputValidate = ~Char - ( ~Char * ls(U"]]>") );
+  // We need a separate production that finds any contained "]]>" so we can escape it appropriately.
+  _TyFinal CDCharsOutputValidate = ~Char - ( ~Char * ls(U"]]>") * ~Char );
 
 // CharData and/or references:
 	// We must have at least one character for the triggers to fire correctly.
@@ -117,8 +117,6 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyFinal CharData = ++lnot(U"<&") - ( ~lnot(U"<&") * ls(U"]]>") * ~lnot(U"<&") );	
 	_TyFinal CharDataWithTrigger = CharData * t(TyGetTriggerCharDataEndpoint<_TyLexT>());	
 	_TyFinal CharDataAndReferences = ++( CharDataWithTrigger | Reference );
-	// For output validation we want to stop as soon as we find a "]]>" so we can escape it - we'll see if this works:
-	_TyFinal CharDataOutputValidate = ++lnot(U"<&") - ( ~lnot(U"<&") * ls(U"]]>") );
 
 // prolog stuff:
 // XMLDecl and TextDecl(external DTDs):
@@ -185,8 +183,8 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 // 	to the set of productions for the intSubset as these represent a entirely distinct (for the most part) production set.
 // Note that an external DTD may start with TextDecl production.
 	_TyFinal 	doctype_begin = ls(U"<!DOCTYPE") * S * Name * --(S * ExternalID) * --S;
-	_TyFinal 	doctypedecl_no_intSubset = doctype_begin * l('>');
-	_TyFinal 	doctypedecl_intSubset_begin = doctype_begin * l('['); // This is returned as a token different from doctypedecl_no_intSubset. This will cause the parser to go into "DTD" mode, recognizing DTD markup, etc.
+	_TyFinal 	doctypedecl_no_intSubset = doctype_begin * l(U'>');
+	_TyFinal 	doctypedecl_intSubset_begin = doctype_begin * l(U'['); // This is returned as a token different from doctypedecl_no_intSubset. This will cause the parser to go into "DTD" mode, recognizing DTD markup, etc.
 	_TyFinal 	doctypedecl_intSubset_end = l(U']') * --S * l(U'>');
 
 
@@ -234,9 +232,10 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 // For these we needn't actually set an action but we do so anyway.
 // The output validator won't execute any triggers/actions - it just stores the last token match point.
 // We don't conglomerate these because they are used individually.
+#ifdef XMLPGEN_VALIDATION_ACTIONS // Don't need these.
 	CommentChars.SetAction( TyGetTokenValidCommentChars<_TyLexT>() );
 	NCName.SetAction( TyGetTokenValidNCName<_TyLexT>() );
-	CharDataOutputValidate.SetAction( TyGetTokenValidCharData<_TyLexT>() );
+	CharData.SetAction( TyGetTokenValidCharData<_TyLexT>() );
 	AttCharDataNoSingleQuoteOutputValidate.SetAction( TyGetTokenValidAttCharDataNoSingleQuote<_TyLexT>() );
 	AttCharDataNoDoubleQuoteOutputValidate.SetAction( TyGetTokenValidAttCharDataNoDoubleQuote<_TyLexT>() );
 	Name.SetAction( TyGetTokenValidName<_TyLexT>() );
@@ -245,6 +244,7 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	EncName.SetAction( TyGetTokenValidEncName<_TyLexT>() );
 	PITarget.SetAction( TyGetTokenValidPITarget<_TyLexT>() );
 	PITargetMeatOutputValidate.SetAction( TyGetTokenValidPITargetMeat<_TyLexT>() );
+#endif //XMLPGEN_VALIDATION_ACTIONS
 
 	typedef _dfa< _TyCTok, _TyAllocator >	_TyDfa;
 	typedef _TyDfa::_TyDfaCtxt _TyDfaCtxt;
@@ -266,9 +266,9 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyDfaCtxt dctxtNCName(dfaNCName);
 	gen_dfa(NCName, dfaNCName, dctxtNCName);
 
-	_TyDfa dfaCharDataOutputValidate;
-	_TyDfaCtxt dctxtCharDataOutputValidate(dfaCharDataOutputValidate);
-	gen_dfa(CharDataOutputValidate, dfaCharDataOutputValidate, dctxtCharDataOutputValidate);
+	_TyDfa dfaCharData;
+	_TyDfaCtxt dctxtCharData(dfaCharData);
+	gen_dfa(CharData, dfaCharData, dctxtCharData);
 
 	_TyDfa dfaAttCharDataNoSingleQuote;
 	_TyDfaCtxt dctxtAttCharDataNoSingleQuote(dfaAttCharDataNoSingleQuote);
@@ -308,16 +308,16 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 			"stateUTF32", "char32_t", "U'", "'");
 	gen.add_dfa(dfaAll, dctxtAll, "startUTF32All");
 	gen.add_dfa(dfaXMLDecl, dctxtXMLDecl, "startUTF32XMLDecl");
-	gen.add_dfa( dfaCommentChars, dctxtCommentChars, "startUTF32CommentChars" );
-	gen.add_dfa( dfaNCName, dctxtNCName, "startUTF32NCName" );
-	gen.add_dfa( dfaCharDataOutputValidate, dctxtCharDataOutputValidate, "startUTF32CharDataOutputValidate" );
-	gen.add_dfa( dfaAttCharDataNoSingleQuote, dctxtAttCharDataNoSingleQuote, "startUTF32AttCharDataNoSingleQuote" );
-	gen.add_dfa( dfaAttCharDataNoDoubleQuote, dctxtAttCharDataNoDoubleQuote, "startUTF32AttCharDataNoDoubleQuote" );
-	gen.add_dfa( dfaName, dctxtName, "startUTF32Name" );
-	gen.add_dfa( dfaCharRefDecData, dctxtCharRefDecData, "startUTF32CharRefDecData" );
-	gen.add_dfa( dfaCharRefHexData, dctxtCharRefHexData, "startUTF32CharRefHexData" );
-	gen.add_dfa( dfaEncName, dctxtEncName, "startUTF32EncName" );
-	gen.add_dfa( dfaPITarget, dctxtPITarget, "startUTF32PITarget" );
-	gen.add_dfa( dfaPITargetMeatOutputValidate, dctxtPITargetMeatOutputValidate, "startUTF32PITargetMeatOutputValidate" );
+	gen.add_dfa( dfaCommentChars, dctxtCommentChars, "startUTF32CommentChars", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaNCName, dctxtNCName, "startUTF32NCName", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaCharData, dctxtCharData, "startUTF32CharData", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaAttCharDataNoSingleQuote, dctxtAttCharDataNoSingleQuote, "startUTF32AttCharDataNoSingleQuote", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaAttCharDataNoDoubleQuote, dctxtAttCharDataNoDoubleQuote, "startUTF32AttCharDataNoDoubleQuote", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaName, dctxtName, "startUTF32Name", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaCharRefDecData, dctxtCharRefDecData, "startUTF32CharRefDecData", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaCharRefHexData, dctxtCharRefHexData, "startUTF32CharRefHexData", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaEncName, dctxtEncName, "startUTF32EncName", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaPITarget, dctxtPITarget, "startUTF32PITarget", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaPITargetMeatOutputValidate, dctxtPITargetMeatOutputValidate, "startUTF32PITargetMeatOutputValidate", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.generate();
 }

@@ -45,6 +45,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #define t(a) _TyTrigger(a)
 #define a(a) _TyFreeAction(a)
 
+// THis could probably be somewhere within lexang as a utility function.
 template < class t_TyFinal, class t_TyDfa, class t_TyDfaCtxt >
 void
 gen_dfa( t_TyFinal const & _rFinal, t_TyDfa & _rDfa, t_TyDfaCtxt & _rDfaCtxt )
