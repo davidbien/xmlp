@@ -222,29 +222,6 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	AllXmlTokens.AddRule( CharDataAndReferences );
 	AllXmlTokens.AddRule( CDSect );
 
-// Write-validation tokens. These are used during writing to:
-// 1) Validate written tokens of various types.
-// 2) Determine the production of CharRefs withing Attribute Values and CharData and CDataSections.
-//    We will automatically substitute CharRefs for disallowed characters in these scenarios. Clearly
-//    CDataSections involve a different mechanism than AttrValues and CharData - we will correctly
-//    nest CDataSections to allow for the existences of "]]>" strings in the output.
-// For these we needn't actually set an action but we do so anyway.
-// The output validator won't execute any triggers/actions - it just stores the last token match point.
-// We don't conglomerate these because they are used individually.
-#ifdef XMLPGEN_VALIDATION_ACTIONS // Don't need these.
-	CommentChars.SetAction( TyGetTokenValidCommentChars<_TyLexT>() );
-	NCName.SetAction( TyGetTokenValidNCName<_TyLexT>() );
-	CharData.SetAction( TyGetTokenValidCharData<_TyLexT>() );
-	AttCharDataNoSingleQuoteOutputValidate.SetAction( TyGetTokenValidAttCharDataNoSingleQuote<_TyLexT>() );
-	AttCharDataNoDoubleQuoteOutputValidate.SetAction( TyGetTokenValidAttCharDataNoDoubleQuote<_TyLexT>() );
-	Name.SetAction( TyGetTokenValidName<_TyLexT>() );
-	CharRefDecData.SetAction( TyGetTokenValidCharRefDec<_TyLexT>() );
-	CharRefHexData.SetAction( TyGetTokenValidCharRefHex<_TyLexT>() );
-	EncName.SetAction( TyGetTokenValidEncName<_TyLexT>() );
-	PITarget.SetAction( TyGetTokenValidPITarget<_TyLexT>() );
-	PITargetMeatOutputValidate.SetAction( TyGetTokenValidPITargetMeat<_TyLexT>() );
-#endif //XMLPGEN_VALIDATION_ACTIONS
-
 	typedef _dfa< _TyCTok, _TyAllocator >	_TyDfa;
 	typedef _TyDfa::_TyDfaCtxt _TyDfaCtxt;
 
@@ -257,6 +234,14 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyDfaCtxt	dctxtAll(dfaAll);
 	gen_dfa(AllXmlTokens, dfaAll, dctxtAll);
 
+// Write-validation tokens. These are used during writing to:
+// 1) Validate written tokens of various types.
+// 2) Determine the production of CharRefs withing Attribute Values and CharData and CDataSections.
+//    We will automatically substitute CharRefs for disallowed characters in these scenarios. Clearly
+//    CDataSections involve a different mechanism than AttrValues and CharData - we will correctly
+//    nest CDataSections to allow for the existences of "]]>" strings in the output.
+// For these tokens we don't set an action and we don't want to because we want them untemplatized.
+// We don't conglomerate these because they are used individually.
 	_TyDfa dfaCommentChars;
 	_TyDfaCtxt dctxtCommentChars(dfaCommentChars);
 	gen_dfa(CommentChars, dfaCommentChars, dctxtCommentChars);
@@ -268,6 +253,10 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyDfa dfaCharData;
 	_TyDfaCtxt dctxtCharData(dfaCharData);
 	gen_dfa(CharData, dfaCharData, dctxtCharData);
+
+	_TyDfa dfaCDCharsOutputValidate;
+	_TyDfaCtxt dctxtCDCharsOutputValidate( dfaCDCharsOutputValidate );
+	gen_dfa( CDCharsOutputValidate, dfaCDCharsOutputValidate, dctxtCDCharsOutputValidate );
 
 	_TyDfa dfaAttCharDataNoSingleQuote;
 	_TyDfaCtxt dctxtAttCharDataNoSingleQuote(dfaAttCharDataNoSingleQuote);
@@ -310,6 +299,7 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	gen.add_dfa( dfaCommentChars, dctxtCommentChars, "startUTF16CommentChars", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaNCName, dctxtNCName, "startUTF16NCName", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaCharData, dctxtCharData, "startUTF16CharData", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaCDCharsOutputValidate, dctxtCDCharsOutputValidate, "startUTF16CDCharsOutputValidate", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaAttCharDataNoSingleQuote, dctxtAttCharDataNoSingleQuote, "startUTF16AttCharDataNoSingleQuote", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaAttCharDataNoDoubleQuote, dctxtAttCharDataNoDoubleQuote, "startUTF16AttCharDataNoDoubleQuote", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaName, dctxtName, "startUTF16Name", ( 1ul << egdoDontTemplatizeStates ) );
