@@ -31,11 +31,14 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include <fstream>
 #include <tuple>
 
+#define XMLPGEN_VALIDATION_ACTIONS
+
 #include "jsonstrm.h"
 #include "jsonobjs.h"
 #include "_compat.inl"
 #include "syslogmgr.inl"
 #include "xml_traits.h"
+
 
 #define l(x)	literal<_TyCTok>(x)
 #define ls(x)	litstr<_TyCTok>(x)

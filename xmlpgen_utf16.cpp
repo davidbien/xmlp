@@ -240,6 +240,31 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 //    We will automatically substitute CharRefs for disallowed characters in these scenarios. Clearly
 //    CDataSections involve a different mechanism than AttrValues and CharData - we will correctly
 //    nest CDataSections to allow for the existences of "]]>" strings in the output.
+// For these we needn't actually set an action but we do so anyway but they only annotate the accept state
+//  with their token ids.
+// The output validator won't execute any triggers/actions - it just stores the last token match point.
+// We don't conglomerate these because they are used individually.
+#ifdef XMLPGEN_VALIDATION_ACTIONS // Don't need these.
+	CommentChars.SetAction( TyGetTokenValidCommentChars<_TyLexT>() );
+	NCName.SetAction( TyGetTokenValidNCName<_TyLexT>() );
+	CharData.SetAction( TyGetTokenValidCharData<_TyLexT>() );
+  CDCharsOutputValidate.SetAction( TyGetTokenValidCDataSection<_TyLexT>() );
+	AttCharDataNoSingleQuoteOutputValidate.SetAction( TyGetTokenValidAttCharDataNoSingleQuote<_TyLexT>() );
+	AttCharDataNoDoubleQuoteOutputValidate.SetAction( TyGetTokenValidAttCharDataNoDoubleQuote<_TyLexT>() );
+	Name.SetAction( TyGetTokenValidName<_TyLexT>() );
+	CharRefDecData.SetAction( TyGetTokenValidCharRefDec<_TyLexT>() );
+	CharRefHexData.SetAction( TyGetTokenValidCharRefHex<_TyLexT>() );
+	EncName.SetAction( TyGetTokenValidEncName<_TyLexT>() );
+	PITarget.SetAction( TyGetTokenValidPITarget<_TyLexT>() );
+	PITargetMeatOutputValidate.SetAction( TyGetTokenValidPITargetMeat<_TyLexT>() );
+#endif //XMLPGEN_VALIDATION_ACTIONS
+
+// Write-validation tokens. These are used during writing to:
+// 1) Validate written tokens of various types.
+// 2) Determine the production of CharRefs withing Attribute Values and CharData and CDataSections.
+//    We will automatically substitute CharRefs for disallowed characters in these scenarios. Clearly
+//    CDataSections involve a different mechanism than AttrValues and CharData - we will correctly
+//    nest CDataSections to allow for the existences of "]]>" strings in the output.
 // For these tokens we don't set an action and we don't want to because we want them untemplatized.
 // We don't conglomerate these because they are used individually.
 	_TyDfa dfaCommentChars;
