@@ -29,6 +29,19 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 // Define some simple macros to make the productions more readable.
 // We don't include surrogates when defining a UTF32 set of productions as these are not valid UTF32 values.
 // However for the UTF16 we necessarily need to allow these surrogates to be present in productions.
+// REVIEW:<dbien>: Looking over the XML spec it seems that what they really mean when they say [^<&] (for instance)
+//	is Char - ( '<' | '&' ) - which I currently don't have an easy manner of expressing. Using the minus operator
+//	introduces an anti-accepting state and this isn't acceptable. Gotta figure out how to do this.
+// The easy way would be to introduce another litnotset_no_* option that excluded not only surrogates but
+//	also all those things excluded by Char. In fact we could create a general purpose manner of doing so, but maybe that is overkill.
+// It seems that we could, potentially, take anti-accepting states and connect them to the dead state. We might, however, want to introduce
+//	a different flavor of anti-accepting states to make this happen. This might do exactly what we want for the production:
+// 		Char - ( '<' | '&' )
+// it would be an interesting experiment. It would require that a dead state be added, but the reality is that it would be silly to use
+//	a non-optimized DFA for matching so that it is not a horrible restriction.
+// We might be able to use the "bitwise exclusive or" operator for this, i.e.:
+//	Char ^ ( '<' | '&' )
+// seems like a reasonable fit.
 #define lnot(x) litnotset_no_surrogates<_TyCTok>(x)
 
 // Utility and multiple use non-triggered productions:
@@ -66,9 +79,11 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 																* Name * t( TyGetTriggerEntityRefEnd<_TyLexT>() ) * l(U';');
 	_TyFinal	CharRefDecData = ++lr(U'0',U'9');
 	_TyFinal	CharRefHexData = ++( lr(U'0',U'9') | lr(U'A',U'F') | lr(U'a',U'f') );
-	_TyFinal	CharRef = ( ls(U"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() ) * CharRefDecData * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(U';') )	// [66]
-							| ( ls(U"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * CharRefHexData * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(U';') );
+  _TyFinal	CharRefDec = ls(U"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() ) * CharRefDecData * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(U';');
+  _TyFinal	CharRefHex = ls(U"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * CharRefHexData * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(U';');
+	_TyFinal	CharRef = CharRefDec | CharRefHex; // [66]
 	_TyFinal	Reference = EntityRef | CharRef;	// [67]
+
 	// We use the same triggers for these just to save implementation space and because we know by the final trigger
 	//	whether a single or double quote was present.
 	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(U"&<\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
@@ -241,10 +256,11 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 //    We will automatically substitute CharRefs for disallowed characters in these scenarios. Clearly
 //    CDataSections involve a different mechanism than AttrValues and CharData - we will correctly
 //    nest CDataSections to allow for the existences of "]]>" strings in the output.
-// For these we needn't actually set an action but we do so anyway.
+// For these we needn't actually set an action but we do so anyway but they only annotate the accept state
+//  with their token ids.
 // The output validator won't execute any triggers/actions - it just stores the last token match point.
 // We don't conglomerate these because they are used individually.
-#ifdef XMLPGEN_VALIDATION_ACTIONS // Don't need these.
+	S.SetAction( TyGetTokenValidSpaces<_TyLexT>() );
 	CommentChars.SetAction( TyGetTokenValidCommentChars<_TyLexT>() );
 	NCName.SetAction( TyGetTokenValidNCName<_TyLexT>() );
 	CharData.SetAction( TyGetTokenValidCharData<_TyLexT>() );
@@ -257,8 +273,11 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	EncName.SetAction( TyGetTokenValidEncName<_TyLexT>() );
 	PITarget.SetAction( TyGetTokenValidPITarget<_TyLexT>() );
 	PITargetMeatOutputValidate.SetAction( TyGetTokenValidPITargetMeat<_TyLexT>() );
-#endif //XMLPGEN_VALIDATION_ACTIONS
 
+	_TyDfa dfaSpaces;
+	_TyDfaCtxt dctxtSpaces(dfaSpaces);
+	gen_dfa(S, dfaSpaces, dctxtSpaces);
+	
 	_TyDfa dfaCommentChars;
 	_TyDfaCtxt dctxtCommentChars(dfaCommentChars);
 	gen_dfa(CommentChars, dfaCommentChars, dctxtCommentChars);
@@ -307,12 +326,25 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyDfaCtxt dctxtPITargetMeatOutputValidate(dfaPITargetMeatOutputValidate);
 	gen_dfa(PITargetMeatOutputValidate, dfaPITargetMeatOutputValidate, dctxtPITargetMeatOutputValidate);
 
+  // During output we want to be able to detect valid references in CharData and AttrData.
+  EntityRef.SetAction( TyGetTokenEntityRef<_TyLexT>() );
+  CharRefDec.SetAction( TyGetTokenCharRefDec<_TyLexT>() );
+  CharRefHex.SetAction( TyGetTokenCharRefHex<_TyLexT>() );
+  _TyFinal AllReferences( EntityRef );
+	AllReferences.AddRule( CharRefDec );
+	AllReferences.AddRule( CharRefHex );
+
+	_TyDfa dfaAllReferences;
+	_TyDfaCtxt dctxtAllReferences(dfaAllReferences);
+	gen_dfa(AllReferences, dfaAllReferences, dctxtAllReferences);
+
 	_l_generator< _TyDfa, char >
 		gen( _egfdFamilyDisp, "_xmlplex_utf32.h",
 			"XMLPLEX", true, "ns_xmlplex",
 			"stateUTF32", "char32_t", "U'", "'");
 	gen.add_dfa(dfaAll, dctxtAll, "startUTF32All");
 	gen.add_dfa(dfaXMLDecl, dctxtXMLDecl, "startUTF32XMLDecl");
+	gen.add_dfa( dfaSpaces, dctxtSpaces, "startUTF32Spaces", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaCommentChars, dctxtCommentChars, "startUTF32CommentChars", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaNCName, dctxtNCName, "startUTF32NCName", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaCharData, dctxtCharData, "startUTF32CharData", ( 1ul << egdoDontTemplatizeStates ) );
@@ -325,5 +357,6 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	gen.add_dfa( dfaEncName, dctxtEncName, "startUTF32EncName", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaPITarget, dctxtPITarget, "startUTF32PITarget", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaPITargetMeatOutputValidate, dctxtPITargetMeatOutputValidate, "startUTF32PITargetMeatOutputValidate", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaAllReferences, dctxtAllReferences, "startUTF32AllReferences", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.generate();
 }

@@ -64,9 +64,11 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 																* Name * t( TyGetTriggerEntityRefEnd<_TyLexT>() ) * l(u8';');
 	_TyFinal	CharRefDecData = ++lr(u8'0',u8'9');
 	_TyFinal	CharRefHexData = ++( lr(u8'0',u8'9') | lr(u8'A',u8'F') | lr(u8'a',u8'f') );
-	_TyFinal	CharRef = ( ls(u8"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() ) * CharRefDecData * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(u8';') )	// [66]
-							| ( ls(u8"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * CharRefHexData * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(u8';') );
+  _TyFinal	CharRefDec = ls(u8"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() ) * CharRefDecData * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(u8';');
+  _TyFinal	CharRefHex = ls(u8"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * CharRefHexData * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(u8';');
+	_TyFinal	CharRef = CharRefDec | CharRefHex; // [66]
 	_TyFinal	Reference = EntityRef | CharRef;	// [67]
+  
 	// We use the same triggers for these just to save implementation space and because we know by the final trigger
 	//	whether a single or double quote was present.
 	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(u8"&<\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
@@ -237,10 +239,11 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 //    We will automatically substitute CharRefs for disallowed characters in these scenarios. Clearly
 //    CDataSections involve a different mechanism than AttrValues and CharData - we will correctly
 //    nest CDataSections to allow for the existences of "]]>" strings in the output.
-// For these we needn't actually set an action but we do so anyway.
+// For these we needn't actually set an action but we do so anyway but they only annotate the accept state
+//  with their token ids.
 // The output validator won't execute any triggers/actions - it just stores the last token match point.
 // We don't conglomerate these because they are used individually.
-#ifdef XMLPGEN_VALIDATION_ACTIONS // Don't need these.
+	S.SetAction( TyGetTokenValidSpaces<_TyLexT>() );
 	CommentChars.SetAction( TyGetTokenValidCommentChars<_TyLexT>() );
 	NCName.SetAction( TyGetTokenValidNCName<_TyLexT>() );
 	CharData.SetAction( TyGetTokenValidCharData<_TyLexT>() );
@@ -253,8 +256,11 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	EncName.SetAction( TyGetTokenValidEncName<_TyLexT>() );
 	PITarget.SetAction( TyGetTokenValidPITarget<_TyLexT>() );
 	PITargetMeatOutputValidate.SetAction( TyGetTokenValidPITargetMeat<_TyLexT>() );
-#endif //XMLPGEN_VALIDATION_ACTIONS
 
+	_TyDfa dfaSpaces;
+	_TyDfaCtxt dctxtSpaces(dfaSpaces);
+	gen_dfa(S, dfaSpaces, dctxtSpaces);
+	
 	_TyDfa dfaCommentChars;
 	_TyDfaCtxt dctxtCommentChars(dfaCommentChars);
 	gen_dfa(CommentChars, dfaCommentChars, dctxtCommentChars);
@@ -303,12 +309,25 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyDfaCtxt dctxtPITargetMeatOutputValidate(dfaPITargetMeatOutputValidate);
 	gen_dfa(PITargetMeatOutputValidate, dfaPITargetMeatOutputValidate, dctxtPITargetMeatOutputValidate);
 
+  // During output we want to be able to detect valid references in CharData and AttrData.
+  EntityRef.SetAction( TyGetTokenEntityRef<_TyLexT>() );
+  CharRefDec.SetAction( TyGetTokenCharRefDec<_TyLexT>() );
+  CharRefHex.SetAction( TyGetTokenCharRefHex<_TyLexT>() );
+  _TyFinal AllReferences( EntityRef );
+	AllReferences.AddRule( CharRefDec );
+	AllReferences.AddRule( CharRefHex );
+
+	_TyDfa dfaAllReferences;
+	_TyDfaCtxt dctxtAllReferences(dfaAllReferences);
+	gen_dfa(AllReferences, dfaAllReferences, dctxtAllReferences);
+
 	_l_generator< _TyDfa, char >
 		gen( _egfdFamilyDisp, "_xmlplex_utf8.h",
 			"XMLPLEX", true, "ns_xmlplex",
 			"stateUTF8", "char8_t", "u8'", "'");
 	gen.add_dfa( dfaAll, dctxtAll, "startUTF8All" );
 	gen.add_dfa( dfaXMLDecl, dctxtXMLDecl, "startUTF8XMLDecl" );
+	gen.add_dfa( dfaSpaces, dctxtSpaces, "startUTF8Spaces", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaCommentChars, dctxtCommentChars, "startUTF8CommentChars", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaNCName, dctxtNCName, "startUTF8NCName", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaCharData, dctxtCharData, "startUTF8CharData", ( 1ul << egdoDontTemplatizeStates ) );
@@ -321,5 +340,6 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	gen.add_dfa( dfaEncName, dctxtEncName, "startUTF8EncName", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaPITarget, dctxtPITarget, "startUTF8PITarget", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaPITargetMeatOutputValidate, dctxtPITargetMeatOutputValidate, "startUTF8PITargetMeatOutputValidate", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaAllReferences, dctxtAllReferences, "startUTF8AllReferences", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.generate();
 }

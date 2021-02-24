@@ -31,8 +31,6 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include <fstream>
 #include <tuple>
 
-#define XMLPGEN_VALIDATION_ACTIONS
-
 #include "jsonstrm.h"
 #include "jsonobjs.h"
 #include "_compat.inl"

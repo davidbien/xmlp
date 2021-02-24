@@ -66,9 +66,11 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 																* Name * t( TyGetTriggerEntityRefEnd<_TyLexT>() ) * l(u';');
 	_TyFinal	CharRefDecData = ++lr(u'0',u'9');
 	_TyFinal	CharRefHexData = ++( lr(u'0',u'9') | lr(u'A',u'F') | lr(u'a',u'f') );
-	_TyFinal	CharRef = ( ls(u"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() ) * CharRefDecData * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(u';') )	// [66]
-							| ( ls(u"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * CharRefHexData * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(u';') );
+  _TyFinal	CharRefDec = ls(u"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() ) * CharRefDecData * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(u';');
+  _TyFinal	CharRefHex = ls(u"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * CharRefHexData * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(u';');
+	_TyFinal	CharRef = CharRefDec | CharRefHex; // [66]
 	_TyFinal	Reference = EntityRef | CharRef;	// [67]
+
 	// We use the same triggers for these just to save implementation space and because we know by the final trigger
 	//	whether a single or double quote was present.
 	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(u"&<\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
@@ -187,6 +189,7 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyFinal 	doctypedecl_intSubset_begin = doctype_begin * l(u'['); // This is returned as a token different from doctypedecl_no_intSubset. This will cause the parser to go into "DTD" mode, recognizing DTD markup, etc.
 	_TyFinal 	doctypedecl_intSubset_end = l(u']') * --S * l(u'>');
 
+
 // [70]   	EntityDecl	   ::=   	GEDecl | PEDecl
 // [71]   	GEDecl	   ::=   	'<!ENTITY' S Name S EntityDef S? '>'
 // [72]   	PEDecl	   ::=   	'<!ENTITY' S '%' S Name S PEDef S? '>'
@@ -244,7 +247,7 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 //  with their token ids.
 // The output validator won't execute any triggers/actions - it just stores the last token match point.
 // We don't conglomerate these because they are used individually.
-#ifdef XMLPGEN_VALIDATION_ACTIONS // Don't need these.
+	S.SetAction( TyGetTokenValidSpaces<_TyLexT>() );
 	CommentChars.SetAction( TyGetTokenValidCommentChars<_TyLexT>() );
 	NCName.SetAction( TyGetTokenValidNCName<_TyLexT>() );
 	CharData.SetAction( TyGetTokenValidCharData<_TyLexT>() );
@@ -257,16 +260,11 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	EncName.SetAction( TyGetTokenValidEncName<_TyLexT>() );
 	PITarget.SetAction( TyGetTokenValidPITarget<_TyLexT>() );
 	PITargetMeatOutputValidate.SetAction( TyGetTokenValidPITargetMeat<_TyLexT>() );
-#endif //XMLPGEN_VALIDATION_ACTIONS
 
-// Write-validation tokens. These are used during writing to:
-// 1) Validate written tokens of various types.
-// 2) Determine the production of CharRefs withing Attribute Values and CharData and CDataSections.
-//    We will automatically substitute CharRefs for disallowed characters in these scenarios. Clearly
-//    CDataSections involve a different mechanism than AttrValues and CharData - we will correctly
-//    nest CDataSections to allow for the existences of "]]>" strings in the output.
-// For these tokens we don't set an action and we don't want to because we want them untemplatized.
-// We don't conglomerate these because they are used individually.
+	_TyDfa dfaSpaces;
+	_TyDfaCtxt dctxtSpaces(dfaSpaces);
+	gen_dfa(S, dfaSpaces, dctxtSpaces);
+	
 	_TyDfa dfaCommentChars;
 	_TyDfaCtxt dctxtCommentChars(dfaCommentChars);
 	gen_dfa(CommentChars, dfaCommentChars, dctxtCommentChars);
@@ -315,12 +313,25 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyDfaCtxt dctxtPITargetMeatOutputValidate(dfaPITargetMeatOutputValidate);
 	gen_dfa(PITargetMeatOutputValidate, dfaPITargetMeatOutputValidate, dctxtPITargetMeatOutputValidate);
 
+  // During output we want to be able to detect valid references in CharData and AttrData.
+  EntityRef.SetAction( TyGetTokenEntityRef<_TyLexT>() );
+  CharRefDec.SetAction( TyGetTokenCharRefDec<_TyLexT>() );
+  CharRefHex.SetAction( TyGetTokenCharRefHex<_TyLexT>() );
+  _TyFinal AllReferences( EntityRef );
+	AllReferences.AddRule( CharRefDec );
+	AllReferences.AddRule( CharRefHex );
+
+	_TyDfa dfaAllReferences;
+	_TyDfaCtxt dctxtAllReferences(dfaAllReferences);
+	gen_dfa(AllReferences, dfaAllReferences, dctxtAllReferences);
+
 	_l_generator< _TyDfa, char >
 		gen( _egfdFamilyDisp, "_xmlplex_utf16.h",
 			"XMLPLEX", true, "ns_xmlplex",
 			"stateUTF16", "char16_t", "u'", "'");
 	gen.add_dfa( dfaAll, dctxtAll, "startUTF16All" );
 	gen.add_dfa( dfaXMLDecl, dctxtXMLDecl, "startUTF16XMLDecl" );
+	gen.add_dfa( dfaSpaces, dctxtSpaces, "startUTF16Spaces", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaCommentChars, dctxtCommentChars, "startUTF16CommentChars", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaNCName, dctxtNCName, "startUTF16NCName", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaCharData, dctxtCharData, "startUTF16CharData", ( 1ul << egdoDontTemplatizeStates ) );
@@ -333,5 +344,6 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	gen.add_dfa( dfaEncName, dctxtEncName, "startUTF16EncName", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaPITarget, dctxtPITarget, "startUTF16PITarget", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.add_dfa( dfaPITargetMeatOutputValidate, dctxtPITargetMeatOutputValidate, "startUTF16PITargetMeatOutputValidate", ( 1ul << egdoDontTemplatizeStates ) );
+	gen.add_dfa( dfaAllReferences, dctxtAllReferences, "startUTF16AllReferences", ( 1ul << egdoDontTemplatizeStates ) );
 	gen.generate();
 }
