@@ -76,7 +76,7 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyFinal	AttCharDataNoDoubleQuoteOutputValidate = ~lnot(u8"&<\"");
 	_TyFinal	AttCharDataNoSingleQuoteOutputValidate = ~lnot(u8"&<\'");
 	// We need only record whether single or double quotes were used as a convenience to any reader/writer system that may want to duplicate the current manner of quoting.
-	_TyFinal	AttValue =	l(u8'\"') * /* t( TyGetTriggerAttValueDoubleQuote<_TyLexT>() )  * */ ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(u8'\"') |	// [10]
+	_TyFinal	AttValue =	l(u8'\"') * t( TyGetTriggerAttValueDoubleQuote<_TyLexT>() ) * ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(u8'\"') |	// [10]
 												l(u8'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(u8'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
 	_TyFinal	Attribute = /* NSAttName * Eq * AttValue | */ // [41]
 												QName * Eq * AttValue;
