@@ -49,7 +49,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 // THis could probably be somewhere within lexang as a utility function.
 template < class t_TyFinal, class t_TyDfa, class t_TyDfaCtxt >
 void
-gen_dfa( t_TyFinal const & _rFinal, t_TyDfa & _rDfa, t_TyDfaCtxt & _rDfaCtxt )
+gen_dfa( t_TyFinal const & _rFinal, t_TyDfa & _rDfa, t_TyDfaCtxt & _rDfaCtxt, uint32_t _grfNFACreationOptions = 0 )
 {
 __REGEXP_USING_NAMESPACE
 __XMLP_USING_NAMESPACE
@@ -61,7 +61,7 @@ __XMLP_USING_NAMESPACE
 	typedef typename _TyNfa::_TyNfaCtxt _TyNfaCtxt;
 
 	{//B
-		_TyNfa	nfa( _rDfa.get_allocator() );
+		_TyNfa	nfa( _grfNFACreationOptions, _rDfa.get_allocator() );
 		_TyNfaCtxt	nfaCtxt( nfa );
 
 		_rFinal.ConstructNFA( nfaCtxt );

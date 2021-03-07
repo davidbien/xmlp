@@ -319,7 +319,8 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 
 	_TyDfa dfaAllReferences;
 	_TyDfaCtxt dctxtAllReferences(dfaAllReferences);
-	gen_dfa(AllReferences, dfaAllReferences, dctxtAllReferences);
+	// For this we need to ignore the declared triggers within the above productions - we only want to templatize by char type.
+	gen_dfa(AllReferences, dfaAllReferences, dctxtAllReferences, ( 1 << encoIgnoreTriggers ) );
 
 	_l_generator< _TyDfa, char >
 		gen( _egfdFamilyDisp, "_xmlplex_utf8.h",
