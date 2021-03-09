@@ -11,9 +11,7 @@ set(GTEST_VERSION 1.10.0 CACHE STRING "Google test version")
 FetchContent_Declare(googletest
 GIT_REPOSITORY https://github.com/google/googletest.git
 GIT_TAG release-${GTEST_VERSION})
-
 FetchContent_MakeAvailable(googletest)
-
 include_directories("${gtest_SOURCE_DIR}/include")
 
 #if(NOT googletest_POPULATED)
@@ -92,6 +90,6 @@ target_include_directories(xmltestsame PUBLIC
 )
 target_compile_definitions( xmltestsame
   PUBLIC __NDEBUG_THROW
-  PUBLIC TRACESENABLED=0
-  PUBLIC ASSERTSENABLED=0
+  # PUBLIC TRACESENABLED=0
+  # PUBLIC ASSERTSENABLED=0
 )
