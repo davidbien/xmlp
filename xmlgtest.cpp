@@ -27,6 +27,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include "syslogmgr.inl"
 #include "_compat.inl"
 #include "xml_inc.h"
@@ -59,16 +60,14 @@ protected:
     //  a) Write each encoding with and without a BOM.
     // 4) Write all encodings in a unittest directory in the output.
     // 5) List all file names in this environment object in m_rgFileNamesTestDir.
-    const char kcSlash = ( string::npos == m_strFileNameOrig.find( TChGetFileSeparator<char>() ) ) ? TChGetOtherFileSeparator<char>() : TChGetFileSeparator<char>();
-    VerifyThrowSz( FFileExists( m_strFileNameOrig.c_str() ), "Original test file[%s] doesn't exist.", m_strFileNameOrig.c_str() );
-    size_t nPosXmlExt = m_strFileNameOrig.rfind( ".xml" );
-    VerifyThrowSz( string::npos != nPosXmlExt, "File doesn't have an '.xml' extention [%s].", m_strFileNameOrig.c_str() );
-    size_t nPosPrevSlash = m_strFileNameOrig.rfind( kcSlash );
-    VerifyThrowSz( string::npos != nPosPrevSlash, "Need full path to input file[%s] - couldn't find preceding slash.", m_strFileNameOrig.c_str() );
-    VerifyThrowSz( nPosXmlExt > nPosPrevSlash+1, "uh that's not an acceptable file name [%s].", m_strFileNameOrig.c_str() );
-    string strBaseFile("unittests");
-    strBaseFile += TChGetFileSeparator<char>();
-    strBaseFile += m_strFileNameOrig.substr( nPosPrevSlash+1, nPosXmlExt - ( nPosPrevSlash+1 ) );
+    using namespace filesystem;
+    path pathFileOrig( m_strFileNameOrig );
+    VerifyThrowSz( exists( pathFileOrig ), "Original test file[%s] doesn't exist.", m_strFileNameOrig.c_str() );
+    VerifyThrowSz( pathFileOrig.has_parent_path(), "Need full path to input file[%s] - couldn't find parent path.", m_strFileNameOrig.c_str() );
+    VerifyThrowSz( pathFileOrig.has_extension() && ( pathFileOrig.extension() == ".xml" ), "File doesn't have an '.xml' extention [%s].", m_strFileNameOrig.c_str() );
+    VerifyThrowSz( pathFileOrig.has_stem(), "No base filename in[%s].", m_strFileNameOrig.c_str() );
+    path pathBaseFile( "unittests" );
+    pathBaseFile /= pathFileOrig.stem();
     FileObj fo( OpenReadOnlyFile( m_strFileNameOrig.c_str() ) );
     VerifyThrowSz( fo.FIsOpen(), "Couldn't open file [%s]", m_strFileNameOrig.c_str() );
     uint8_t rgbyBOM[vknBytesBOM];
@@ -100,21 +99,25 @@ protected:
       bool fWithBOM = stGenerate >= efceFileCharacterEncodingCount;
       EFileCharacterEncoding efceGenerate = EFileCharacterEncoding( stGenerate - ( fWithBOM ? efceFileCharacterEncodingCount : 0 ) );
       // Name the new file with the base of the original XML file:
-      string strConvertedFile = strBaseFile;
-      strConvertedFile += "_";
-      strConvertedFile += PszCharacterEncodingShort( efceGenerate );
+      path pathConvertedFile( pathBaseFile );
+      pathConvertedFile += "_";
+      pathConvertedFile += PszCharacterEncodingShort( efceGenerate );
       if ( fWithBOM )
-        strConvertedFile += "BOM";
-      strConvertedFile += ".xml";
+        pathConvertedFile += "BOM";
+      pathConvertedFile += ".xml";
       (void)NFileSeekAndThrow( fo.HFileGet(), nbyLenghtBOM, vkSeekBegin );
-      ConvertFileMapped( fo.HFileGet(), efceEncoding, strConvertedFile.c_str(), efceGenerate, fWithBOM );
-      VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceGenerate, fWithBOM ), strConvertedFile ) ).second );
+      ConvertFileMapped( fo.HFileGet(), efceEncoding, pathConvertedFile.string().c_str(), efceGenerate, fWithBOM );
+      VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceGenerate, fWithBOM ), pathConvertedFile.string() ) ).second );
     }
     // Now copy the original to the output directory - don't modify the name so we know it's the original.
-    string strConvertedFile = strBaseFile;
-    strConvertedFile += ".xml";
-    ConvertFileMapped( fo.HFileGet(), efceEncoding, strConvertedFile.c_str(), efceEncoding, fEncodingFromBOM );
-    VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceEncoding, fEncodingFromBOM ), strConvertedFile ) ).second );
+    path pathConvertedFile( pathBaseFile );
+    pathConvertedFile += ".xml";
+    ConvertFileMapped( fo.HFileGet(), efceEncoding, pathConvertedFile.string().c_str(), efceEncoding, fEncodingFromBOM );
+    VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceEncoding, fEncodingFromBOM ), pathConvertedFile.string() ) ).second );
+
+    // Create a directory for the base file - sans extension - this is where the output files for the given unit test will go.
+    VerifyThrowSz( create_directory( pathBaseFile ), "Unable to create unittest output directory [%s].", pathBaseFile.string().c_str() );
+    m_pathBaseFile = std::move( pathBaseFile );
   }
 
   // TearDown() is invoked immediately after a test finishes.
@@ -123,7 +126,22 @@ protected:
     // Nothing to do in TearDown() - we want to leave the generated unit test files so that they can be analyzed if there are any issues.
   }
 public:
+  filesystem::path PathCreateUnitTestOutputDirectory()
+  {
+    using namespace filesystem;
+    const ::testing::TestInfo* const test_info =
+    ::testing::UnitTest::GetInstance()->current_test_info();
+    path pathSuite = m_pathBaseFile;
+    pathSuite /= test_info->test_suite_name();
+    path pathTest = test_info->name();
+    path::iterator itTestNum = --pathTest.end();
+    pathSuite += "_";
+    pathSuite += itTestNum->c_str();
+    VerifyThrowSz( create_directories( pathSuite ), "Unable to create unittest output directory[%s].", pathSuite.string().c_str() );
+  }
+   
   string m_strFileNameOrig;
+  filesystem::path m_pathBaseFile;
   bool m_fExpectFailure{false}; // If this is true then we expect the test to fail.
   typedef std::pair< EFileCharacterEncoding, bool > _TyKeyEncodingBOM;
   typedef map< _TyKeyEncodingBOM, string > _TyMapTestFiles;
@@ -163,6 +181,7 @@ protected:
   // SetUp() is run immediately before a test starts.
   void SetUp() override 
   {
+    m_pathOutputDir = vpxteXmlpTestEnvironment->PathCreateUnitTestOutputDirectory();
     _TyKeyEncodingBOM keyTestFile;
     std::tie(keyTestFile.second, (int&)keyTestFile.first) = GetParam();
     m_citTestFile = vpxteXmlpTestEnvironment->m_mapFileNamesTestDir.find( keyTestFile );
@@ -209,9 +228,11 @@ protected:
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
     _TyXmlParser xmlParser;
     _TyReadCursor xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
-    _TyXmlDoc xmlDocVar;
-    xmlDocVar.FromXmlStream( xmlReadCursor );
+    _TyXmlDoc xmlDoc;
+    xmlDoc.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
+    // Since we succeeded we test writing and then we compare the results.
+    
   }
   template < template < class ... > class t_tempTransport >
   void TestParserFileTransportVar()
@@ -294,6 +315,7 @@ protected:
   }
 public:
   _TyMapTestFiles::const_iterator m_citTestFile;
+  filesystem::path m_pathOutputDir;
   bool m_fExpectFailure{false}; // We should only succeed on two types of the ten for this test. On the others we expect failure. Also the test itself may be a failure type test.
 };
 
@@ -312,15 +334,15 @@ typedef XmlpTestParser< xml_traits< _l_transport_file< char32_t, false_type >, f
 TEST_P( vTyTestFileTransportUTF32_SE, TestFileTransportUTF32 ) { TestParserFile(); }
 
 // Give us a set of 10 tests for each scenario above. 8 of those tests will fail appropriately (or not if there is a bug).
-INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF8, vTyTestFileTransportUTF8,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransportUTF8,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF16_NSE, vTyTestFileTransportUTF16_NSE,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransportUTF16_NSE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF16_SE, vTyTestFileTransportUTF16_SE,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransportUTF16_SE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF32_NSE, vTyTestFileTransportUTF32_NSE,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransportUTF32_NSE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransportUTF32_SE, vTyTestFileTransportUTF32_SE,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransportUTF32_SE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
 // 2) Memory.
@@ -336,15 +358,15 @@ typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char32_t, false_type 
 TEST_P( vTyTestMemoryTransportUTF32_SE, TestMemoryTransportUTF32 ) { TestParserMemory(); }
 
 // Give us a set of 10 tests for each scenario above. 8 of those tests will fail appropriately (or not if there is a bug).
-INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF8, vTyTestMemoryTransportUTF8,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransport, vTyTestMemoryTransportUTF8,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF16_NSE, vTyTestMemoryTransportUTF16_NSE,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransport, vTyTestMemoryTransportUTF16_NSE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF16_SE, vTyTestMemoryTransportUTF16_SE,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransport, vTyTestMemoryTransportUTF16_SE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF32_NSE, vTyTestMemoryTransportUTF32_NSE,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransport, vTyTestMemoryTransportUTF32_NSE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransportUTF32_SE, vTyTestMemoryTransportUTF32_SE,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransport, vTyTestMemoryTransportUTF32_SE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 
@@ -357,7 +379,7 @@ TEST_P( vTyTestVarTransportUTF8, TestVarTransportUTF8 )
   TestParserFileTransportVar< _l_transport_file >(); 
   TestParserMemoryTransportVar< _l_transport_fixedmem >();
 }
-INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF8, vTyTestVarTransportUTF8,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransport, vTyTestVarTransportUTF8,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 typedef _l_transport_var< _l_transport_file< char16_t, false_type >, _l_transport_file< char16_t, true_type >, _l_transport_mapped< char16_t, false_type >, _l_transport_mapped< char16_t, true_type >, 
@@ -369,7 +391,7 @@ TEST_P( vTyTestVarTransportUTF16, TestVarTransportUTF16 )
   TestParserFileTransportVar< _l_transport_file >(); 
   TestParserMemoryTransportVar< _l_transport_fixedmem >();
 }
-INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF16, vTyTestVarTransportUTF16,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransport, vTyTestVarTransportUTF16,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 typedef _l_transport_var< _l_transport_file< char32_t, false_type >, _l_transport_file< char32_t, true_type >, _l_transport_mapped< char32_t, false_type >, _l_transport_mapped< char32_t, true_type >, 
@@ -381,7 +403,7 @@ TEST_P( vTyTestVarTransportUTF32, TestVarTransportUTF32 )
   TestParserFileTransportVar< _l_transport_file >();
   TestParserMemoryTransportVar< _l_transport_fixedmem >();
 }
-INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransportUTF32, vTyTestVarTransportUTF32,
+INSTANTIATE_TEST_SUITE_P( TestXmlParserVarTransport, vTyTestVarTransportUTF32,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 // XmlpTestVariantParser: This unit tests a single file in all possible formats - with and without BOM in the file.
@@ -403,6 +425,7 @@ protected:
   // SetUp() is run immediately before a test starts.
   void SetUp() override 
   {
+    m_pathOutputDir = vpxteXmlpTestEnvironment->PathCreateUnitTestOutputDirectory();
     _TyKeyEncodingBOM keyTestFile;
     std::tie(keyTestFile.second, (int&)keyTestFile.first) = GetParam();
     m_citTestFile = vpxteXmlpTestEnvironment->m_mapFileNamesTestDir.find( keyTestFile );
@@ -522,6 +545,7 @@ protected:
   }
 public:
   _TyMapTestFiles::const_iterator m_citTestFile;
+  filesystem::path m_pathOutputDir;
   bool m_fExpectFailure{false};
 };
 
@@ -541,12 +565,12 @@ TEST_P( vTyTestVarParserMemoryTransport, TestVarParserMemoryTransport )
   TestParserMemory();
 }
 // Give us some tests.
-INSTANTIATE_TEST_SUITE_P( TestXmlVarParserMappedTransport, vTyTestVarParserMappedTransport,
+INSTANTIATE_TEST_SUITE_P( TestXmlVarParser, vTyTestVarParserMappedTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlVarParserFileTransport, vTyTestVarParserFileTransport,
+INSTANTIATE_TEST_SUITE_P( TestXmlVarParser, vTyTestVarParserFileTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-INSTANTIATE_TEST_SUITE_P( TestXmlVarParserMemoryTransport, vTyTestVarParserMemoryTransport,
+INSTANTIATE_TEST_SUITE_P( TestXmlVarParser, vTyTestVarParserMemoryTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 // Test variant transport with the variant parser.
@@ -557,7 +581,7 @@ TEST_P( vTyTestVarParserVarTransport, TestVarParserVarTransport )
   TestParserFileTransportVar<_l_transport_file>();
   TestParserMemoryTransportVar<_l_transport_fixedmem>();
 }
-INSTANTIATE_TEST_SUITE_P( TestXmlVarParserVarTransport, vTyTestVarParserVarTransport,
+INSTANTIATE_TEST_SUITE_P( TestXmlVarParser, vTyTestVarParserVarTransport,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 
 int _TryMain( int argc, char **argv )

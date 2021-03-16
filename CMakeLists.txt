@@ -67,6 +67,11 @@ target_include_directories(xmlgtest PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
 )
 target_link_libraries(xmlgtest gtest gtest_main)
+target_compile_definitions( xmlgtest
+  PUBLIC __NDEBUG_THROW
+  # PUBLIC TRACESENABLED=0
+  PUBLIC ASSERTSENABLED=1
+)
 
 # We may not notice new unittests until CMakeLists.txt is rebuilt - that's ok.
 file(GLOB XMLUNITTESTS LIST_DIRECTORIES true unittests/*.xml )
