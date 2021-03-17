@@ -33,6 +33,8 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "xml_inc.h"
 #include "xml_tag.h"
 #include "xml_tag_var.h"
+#include "xml_transport.h"
+#include "xml_writer.h"
 #include "gtest/gtest.h"
 
 std::string g_strProgramName;
@@ -67,7 +69,8 @@ protected:
     VerifyThrowSz( pathFileOrig.has_extension() && ( pathFileOrig.extension() == ".xml" ), "File doesn't have an '.xml' extention [%s].", m_strFileNameOrig.c_str() );
     VerifyThrowSz( pathFileOrig.has_stem(), "No base filename in[%s].", m_strFileNameOrig.c_str() );
     path pathBaseFile( "unittests" );
-    pathBaseFile /= pathFileOrig.stem();
+    m_pathStemOrig = pathFileOrig.stem();
+    pathBaseFile /= m_pathStemOrig;
     FileObj fo( OpenReadOnlyFile( m_strFileNameOrig.c_str() ) );
     VerifyThrowSz( fo.FIsOpen(), "Couldn't open file [%s]", m_strFileNameOrig.c_str() );
     uint8_t rgbyBOM[vknBytesBOM];
@@ -91,13 +94,14 @@ protected:
     }
     
     size_t grfNeedFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
-    grfNeedFiles &= ~( ( 1 << efceEncoding ) << ( size_t(fEncodingFromBOM) * efceFileCharacterEncodingCount ) );
+    m_grfFileOrig = ( ( 1 << efceEncoding ) << ( size_t(fEncodingFromBOM) * efceFileCharacterEncodingCount ) );
+    grfNeedFiles &= ~m_grfFileOrig;
     while( grfNeedFiles )
     {
       // This isn't as efficient as it could be but it feng shuis...
       size_t stGenerate = _bv_get_clear_first_set( grfNeedFiles );
       bool fWithBOM = stGenerate >= efceFileCharacterEncodingCount;
-      EFileCharacterEncoding efceGenerate = EFileCharacterEncoding( stGenerate - ( fWithBOM ? efceFileCharacterEncodingCount : 0 ) );
+      EFileCharacterEncoding efceGenerate = EFileCharacterEncoding( stGenerate % efceFileCharacterEncodingCount );
       // Name the new file with the base of the original XML file:
       path pathConvertedFile( pathBaseFile );
       pathConvertedFile += "_";
@@ -126,7 +130,7 @@ protected:
     // Nothing to do in TearDown() - we want to leave the generated unit test files so that they can be analyzed if there are any issues.
   }
 public:
-  filesystem::path PathCreateUnitTestOutputDirectory()
+  filesystem::path PathCreateUnitTestOutputDirectory() const
   {
     using namespace filesystem;
     const ::testing::TestInfo* const test_info =
@@ -138,9 +142,34 @@ public:
     pathSuite += "_";
     pathSuite += itTestNum->c_str();
     VerifyThrowSz( create_directories( pathSuite ), "Unable to create unittest output directory[%s].", pathSuite.string().c_str() );
+    return pathSuite;
+  }
+  // Return the filename for the output file for the given bit.
+  filesystem::path GetNextFileNameOutput( filesystem::path const & _rpathOutputDir, size_t & _rgrfBitOutput, 
+                                          EFileCharacterEncoding & _refceEncoding, bool & _rfWithBOM, _TyMapTestFiles::value_type *& _rpvtGoldenFile ) const
+  {
+    filesystem::path pathOutputFile( _rpathOutputDir );
+    size_t stGenerate = _bv_get_clear_first_set( _rgrfBitOutput );
+    _rfWithBOM = stGenerate >= efceFileCharacterEncodingCount;
+    _refceEncoding = EFileCharacterEncoding( stGenerate % efceFileCharacterEncodingCount );
+    pathOutputFile /= m_pathStemOrig;
+    if ( ( 1ull << stGenerate ) != m_grfFileOrig )
+    {
+      pathOutputFile += "_";
+      pathOutputFile += PszCharacterEncodingShort( _refceEncoding );
+      if ( _rfWithBOM )
+        pathOutputFile += "BOM";
+    }
+    pathOutputFile += ".xml";
+    return pathOutputFile;
+  }
+  void CompareFiles( filesystem::path const & _rpathOutputFile, _TyMapTestFiles::value_type *& _rpvtGoldenFile )
+  {
   }
    
   string m_strFileNameOrig;
+  filesystem::path m_pathStemOrig;
+  size_t m_grfFileOrig{0}; // The bit for the original file so we can match the name in the output.
   filesystem::path m_pathBaseFile;
   bool m_fExpectFailure{false}; // If this is true then we expect the test to fail.
   typedef std::pair< EFileCharacterEncoding, bool > _TyKeyEncodingBOM;
@@ -226,14 +255,75 @@ protected:
   {
     typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
-    _TyXmlParser xmlParser;
-    _TyReadCursor xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
     _TyXmlDoc xmlDoc;
-    xmlDoc.FromXmlStream( xmlReadCursor );
+    {
+      _TyXmlParser xmlParser;
+      _TyReadCursor xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
+      xmlDoc.FromXmlStream( xmlReadCursor );
+    }
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
     // Since we succeeded we test writing and then we compare the results.
-    
+    size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
+    while( grfOutputFiles )
+    {
+      EFileCharacterEncoding efceEncoding;
+      bool fWithBOM;
+      _TyMapTestFiles::value_type * pvtGoldenFile;
+      filesystem::path pathOutput = vpxteXmlpTestEnvironment->GetNextFileNameOutput( m_pathOutputDir, grfOutputFiles, pvtGoldenFile );
+      switch( pvtGoldenFile->first.first )
+      {
+        case efceUTF8:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        case efceUTF16BE:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        case efceUTF16LE:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        case efceUTF32BE:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        case efceUTF32LE:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        default:
+          VerifyThrow( false );
+        break;
+      }
+    }
   }
+  template < class t_TyXmlWriteTransport >
+  void _WriteXmlDoc( xml_document< _TyXmlTraits > const & _rxd, filesystem::path _pathOutputPath, _TyMapTestFiles::value_type * _pvtGoldenFile )
+  {
+    typedef xml_writer< t_TyXmlWriteTransport > _TyXmlWriter;
+    {//B
+      _TyXmlWriter xwWriter;
+      xwWriter.SetWriteBOM( _pvtGoldenFile->first.second );
+      // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
+      //  for encoding of course. This is the nature of the current unit test.
+      xwWriter.OpenFile( _pathOutputPath.string().c_str() );
+      _rxd.ToXmlStream( xwWriter );
+    }//EB
+    // Now compare the two files:
+    vpxteXmlpTestEnvironment->CompareFiles( _pathOutputPath, _pvtGoldenFile );
+  }
+
   template < template < class ... > class t_tempTransport >
   void TestParserFileTransportVar()
   {
