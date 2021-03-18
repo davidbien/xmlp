@@ -48,6 +48,8 @@ class XmlpTestEnvironment : public testing::Environment
   typedef XmlpTestEnvironment _TyThis;
   typedef testing::Environment _TyBase;
 public:
+  typedef std::pair< EFileCharacterEncoding, bool > _TyKeyEncodingBOM;
+  typedef map< _TyKeyEncodingBOM, string > _TyMapTestFiles;
   explicit XmlpTestEnvironment( const char * _pszFileName )
     : m_strFileNameOrig( _pszFileName )
   {
@@ -145,25 +147,27 @@ public:
     return pathSuite;
   }
   // Return the filename for the output file for the given bit.
-  filesystem::path GetNextFileNameOutput( filesystem::path const & _rpathOutputDir, size_t & _rgrfBitOutput, 
-                                          EFileCharacterEncoding & _refceEncoding, bool & _rfWithBOM, _TyMapTestFiles::value_type *& _rpvtGoldenFile ) const
+  filesystem::path GetNextFileNameOutput( filesystem::path const & _rpathOutputDir, size_t & _rgrfBitOutput, const _TyMapTestFiles::value_type *& _rpvtGoldenFile ) const
   {
     filesystem::path pathOutputFile( _rpathOutputDir );
     size_t stGenerate = _bv_get_clear_first_set( _rgrfBitOutput );
-    _rfWithBOM = stGenerate >= efceFileCharacterEncodingCount;
-    _refceEncoding = EFileCharacterEncoding( stGenerate % efceFileCharacterEncodingCount );
+    bool fWithBOM = stGenerate >= efceFileCharacterEncodingCount;
+    EFileCharacterEncoding efceEncoding = EFileCharacterEncoding( stGenerate % efceFileCharacterEncodingCount );
+    _TyMapTestFiles::const_iterator citFile = m_mapFileNamesTestDir.find( _TyKeyEncodingBOM(efceEncoding, fWithBOM ) );
+    _rpvtGoldenFile = &*citFile;
+    VerifyThrow( m_mapFileNamesTestDir.end() != citFile ); // unexpected.
     pathOutputFile /= m_pathStemOrig;
     if ( ( 1ull << stGenerate ) != m_grfFileOrig )
     {
       pathOutputFile += "_";
-      pathOutputFile += PszCharacterEncodingShort( _refceEncoding );
-      if ( _rfWithBOM )
+      pathOutputFile += PszCharacterEncodingShort( efceEncoding );
+      if ( fWithBOM )
         pathOutputFile += "BOM";
     }
     pathOutputFile += ".xml";
     return pathOutputFile;
   }
-  void CompareFiles( filesystem::path const & _rpathOutputFile, _TyMapTestFiles::value_type *& _rpvtGoldenFile )
+  void CompareFiles( filesystem::path const & _rpathOutputFile, const _TyMapTestFiles::value_type * _pvtGoldenFile )
   {
   }
    
@@ -172,8 +176,6 @@ public:
   size_t m_grfFileOrig{0}; // The bit for the original file so we can match the name in the output.
   filesystem::path m_pathBaseFile;
   bool m_fExpectFailure{false}; // If this is true then we expect the test to fail.
-  typedef std::pair< EFileCharacterEncoding, bool > _TyKeyEncodingBOM;
-  typedef map< _TyKeyEncodingBOM, string > _TyMapTestFiles;
   _TyMapTestFiles m_mapFileNamesTestDir; // The resultant files that were written to the test directory in the output.
 };
 
@@ -266,9 +268,7 @@ protected:
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
-      EFileCharacterEncoding efceEncoding;
-      bool fWithBOM;
-      _TyMapTestFiles::value_type * pvtGoldenFile;
+      const _TyMapTestFiles::value_type * pvtGoldenFile;
       filesystem::path pathOutput = vpxteXmlpTestEnvironment->GetNextFileNameOutput( m_pathOutputDir, grfOutputFiles, pvtGoldenFile );
       switch( pvtGoldenFile->first.first )
       {
@@ -309,7 +309,7 @@ protected:
     }
   }
   template < class t_TyXmlWriteTransport >
-  void _WriteXmlDoc( xml_document< _TyXmlTraits > const & _rxd, filesystem::path _pathOutputPath, _TyMapTestFiles::value_type * _pvtGoldenFile )
+  void _WriteXmlDoc( xml_document< _TyXmlTraits > const & _rxd, filesystem::path _pathOutputPath, const _TyMapTestFiles::value_type * _pvtGoldenFile )
   {
     typedef xml_writer< t_TyXmlWriteTransport > _TyXmlWriter;
     {//B
