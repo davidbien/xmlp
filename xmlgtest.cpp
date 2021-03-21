@@ -122,7 +122,9 @@ protected:
     VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceEncoding, fEncodingFromBOM ), pathConvertedFile.string() ) ).second );
 
     // Create a directory for the base file - sans extension - this is where the output files for the given unit test will go.
-    VerifyThrowSz( create_directory( pathBaseFile ), "Unable to create unittest output directory [%s].", pathBaseFile.string().c_str() );
+    std::error_code ec;
+    (void)create_directory( pathBaseFile, ec );
+    VerifyThrowSz( !ec, "Unable to create unittest output directory [%s] ec.message()[%s].", pathBaseFile.string().c_str(), ec.message().c_str() );
     m_pathBaseFile = std::move( pathBaseFile );
   }
 
@@ -143,7 +145,9 @@ public:
     path::iterator itTestNum = --pathTest.end();
     pathSuite += "_";
     pathSuite += itTestNum->c_str();
-    VerifyThrowSz( create_directories( pathSuite ), "Unable to create unittest output directory[%s].", pathSuite.string().c_str() );
+    std::error_code ec;
+    (void)create_directories( pathSuite, ec );
+    VerifyThrowSz( !ec, "Unable to create unittest output directory[%s] ec.message()[%s].", pathSuite.string().c_str(), ec.message().c_str() );
     return pathSuite;
   }
   // Return the filename for the output file for the given bit.
