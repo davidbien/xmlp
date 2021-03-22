@@ -140,7 +140,7 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	// "If there are external markup declarations but there is no standalone document declaration, the value 'no' is assumed."
 	// So we assume no and then the value is meaningless if there are no external declarations.
 	_TyFinal	_YesSDDecl = ls(U"yes") * t(TyGetTriggerStandaloneYes<_TyLexT>());
-	_TyFinal	_NoSDDecl = ls(U"no"); // Don't need to record when we get no.
+	_TyFinal	_NoSDDecl = ls(U"no") * t(TyGetTriggerStandaloneNo<_TyLexT>()); // Need to record a "no" to know when the standalone declaration is not present at all.
 	_TyFinal	SDDecl = S * ls(U"standalone") * Eq *		// [32]
 		( ( l(U'\"') * t(TyGetTriggerStandaloneDoubleQuote<_TyLexT>()) * ( _YesSDDecl | _NoSDDecl ) * l(U'\"') ) |
 			( l(U'\'') * ( _YesSDDecl | _NoSDDecl ) * l(U'\'') ) );
@@ -150,7 +150,7 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	_TyFinal	_TrEncName =	t(TyGetTriggerEncodingNameBegin<_TyLexT>()) *  EncName * t(TyGetTriggerEncodingNameEnd<_TyLexT>());
 	_TyFinal	EncodingDecl = S * ls(U"encoding") * Eq *			// [80].
 			( l(U'\"') * t( TyGetTriggerEncDeclDoubleQuote<_TyLexT>()) * _TrEncName * l(U'\"') | 
-				l(U'\'') * _TrEncName * l(U'\'') );
+				l(U'\'') * t( TyGetTriggerEncDeclSingleQuote<_TyLexT>()) * _TrEncName * l(U'\'') ); // We need to record a trigger for the single quote to know whether the encoding decl is thaere at all.
 
 	_TyFinal	VersionNum = ls(U"1.") * t(TyGetTriggerVersionNumBegin<_TyLexT>()) * ++lr(U'0',U'9') * t(TyGetTriggerVersionNumEnd<_TyLexT>());
 	_TyFinal	VersionInfo = S * ls(U"version") * Eq * // [24]
