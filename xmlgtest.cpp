@@ -266,6 +266,7 @@ protected:
       _TyXmlParser xmlParser;
       _TyReadCursor xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
       xmlDoc.FromXmlStream( xmlReadCursor );
+      xmlDoc.AssertValid();
     }
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
     // Since we succeeded we test writing and then we compare the results.
@@ -316,12 +317,18 @@ protected:
   void _WriteXmlDoc( xml_document< _TyXmlTraits > const & _rxd, filesystem::path _pathOutputPath, const _TyMapTestFiles::value_type * _pvtGoldenFile )
   {
     typedef xml_writer< t_TyXmlWriteTransport > _TyXmlWriter;
+    _rxd.AssertValid();
     {//B
       _TyXmlWriter xwWriter;
       xwWriter.SetWriteBOM( _pvtGoldenFile->first.second );
+      // For this test we won't rewrite the encoding with any new encoding value - we'll just leave it the same.
+      // The default operation (and we will test this elsewhere) will be to write the current encoding into the encoding="" statement.
+      typedef typename _TyXmlWriter::_TyXMLDeclProperties _TyXMLDeclProperties;
+      _TyXMLDeclProperties xdpTranslated( _rxd.GetXMLDeclProperties() );
+      
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
       //  for encoding of course. This is the nature of the current unit test.
-      xwWriter.OpenFile( _pathOutputPath.string().c_str() );
+      xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
       _rxd.ToXmlStream( xwWriter );
     }//EB
     // Now compare the two files:
