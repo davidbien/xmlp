@@ -321,6 +321,7 @@ protected:
     {//B
       _TyXmlWriter xwWriter;
       xwWriter.SetWriteBOM( _pvtGoldenFile->first.second );
+      xwWriter.SetWriteXMLDecl( !_rxd.FPseudoXMLDecl() ); // Only write the XMLDecl if we got one in the source.
       // For this test we won't rewrite the encoding with any new encoding value - we'll just leave it the same.
       // The default operation (and we will test this elsewhere) will be to write the current encoding into the encoding="" statement.
       typedef typename _TyXmlWriter::_TyXMLDeclProperties _TyXMLDeclProperties;
