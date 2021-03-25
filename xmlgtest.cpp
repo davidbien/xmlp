@@ -417,6 +417,7 @@ protected:
     _TyXmlDoc xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
+
   }
   template < template < class ... > class t_tempTransport >
   void TestParserMemoryTransportVar()
@@ -465,7 +466,6 @@ typedef XmlpTestParser< xml_traits< _l_transport_file< char32_t, false_type >, f
 TEST_P( vTyTestFileTransportUTF32_NSE, TestFileTransportUTF32 ) { TestParserFile(); }
 typedef XmlpTestParser< xml_traits< _l_transport_file< char32_t, false_type >, false, false > > vTyTestFileTransportUTF32_SE;
 TEST_P( vTyTestFileTransportUTF32_SE, TestFileTransportUTF32 ) { TestParserFile(); }
-
 // Give us a set of 10 tests for each scenario above. 8 of those tests will fail appropriately (or not if there is a bug).
 INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransportUTF8,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
@@ -478,7 +478,30 @@ INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransportUTF32_
 INSTANTIATE_TEST_SUITE_P( TestXmlParserFileTransport, vTyTestFileTransportUTF32_SE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
-// 2) Memory.
+// 2) Mapped files.
+typedef XmlpTestParser< xml_traits< _l_transport_mapped< char8_t, false_type >, false, false > > vTyTestMappedTransportUTF8;
+TEST_P( vTyTestMappedTransportUTF8, TestMappedTransportUTF8 ) { TestParserFile(); }
+typedef XmlpTestParser< xml_traits< _l_transport_mapped< char16_t, false_type >, false, false > > vTyTestMappedTransportUTF16_NSE;
+TEST_P( vTyTestMappedTransportUTF16_NSE, TestMappedTransportUTF16 ) { TestParserFile(); }
+typedef XmlpTestParser< xml_traits< _l_transport_mapped< char16_t, false_type >, false, false > > vTyTestMappedTransportUTF16_SE;
+TEST_P( vTyTestMappedTransportUTF16_SE, TestMappedTransportUTF16 ) { TestParserFile(); }
+typedef XmlpTestParser< xml_traits< _l_transport_mapped< char32_t, false_type >, false, false > > vTyTestMappedTransportUTF32_NSE;
+TEST_P( vTyTestMappedTransportUTF32_NSE, TestMappedTransportUTF32 ) { TestParserFile(); }
+typedef XmlpTestParser< xml_traits< _l_transport_mapped< char32_t, false_type >, false, false > > vTyTestMappedTransportUTF32_SE;
+TEST_P( vTyTestMappedTransportUTF32_SE, TestMappedTransportUTF32 ) { TestParserFile(); }
+// Give us a set of 10 tests for each scenario above. 8 of those tests will fail appropriately (or not if there is a bug).
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransportUTF8,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransportUTF16_NSE,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransportUTF16_SE,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransportUTF32_NSE,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransportUTF32_SE,
+                          Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
+                          //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
+// 3) Memory.
 typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char8_t, false_type >, false, false > > vTyTestMemoryTransportUTF8;
 TEST_P( vTyTestMemoryTransportUTF8, TestMemoryTransportUTF8 ) { TestParserMemory(); }
 typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char16_t, false_type >, false, false > > vTyTestMemoryTransportUTF16_NSE;
@@ -489,7 +512,6 @@ typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char32_t, false_type 
 TEST_P( vTyTestMemoryTransportUTF32_NSE, TestMemoryTransportUTF32 ) { TestParserMemory(); }
 typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char32_t, false_type >, false, false > > vTyTestMemoryTransportUTF32_SE;
 TEST_P( vTyTestMemoryTransportUTF32_SE, TestMemoryTransportUTF32 ) { TestParserMemory(); }
-
 // Give us a set of 10 tests for each scenario above. 8 of those tests will fail appropriately (or not if there is a bug).
 INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransport, vTyTestMemoryTransportUTF8,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
