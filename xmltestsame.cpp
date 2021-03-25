@@ -65,11 +65,7 @@ TryMain( int argc, char ** argv )
   #define USAGE "%s: Usage:\n%s <xml-file>\n"
 	g_strProgramName = *argv;
 	n_SysLog::InitSysLog( argv[0],  
-#ifndef WIN32
 		/* LOG_PERROR */0, LOG_USER
-#else
-		0, 0
-#endif
 	);
 
   if ( argc < 2 )

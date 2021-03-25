@@ -47,11 +47,7 @@ TryMain( int argc, char ** argv )
 {
 	g_strProgramName = *argv;
 	n_SysLog::InitSysLog( argv[0],  
-#ifndef WIN32
-		LOG_PERROR, LOG_USER
-#else //WIN32
-		0, 0
-#endif //WIN32
+		/*LOG_PERROR*/0, LOG_USER
 	);
 
 	// The "base" generator generates the lexicographical analyzer template as well as the state machine.

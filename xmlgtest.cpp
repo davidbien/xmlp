@@ -39,6 +39,9 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 
 std::string g_strProgramName;
 
+// When this is true we don't write anything.
+static const bool vkfDontTestXmlWrite = false;
+
 namespace ns_XMLGTest
 {
 __XMLP_USING_NAMESPACE
@@ -173,6 +176,32 @@ public:
   }
   void CompareFiles( filesystem::path const & _rpathOutputFile, const _TyMapTestFiles::value_type * _pvtGoldenFile )
   {
+    // Map both files and compare the memory - should match byte for byte. If unit tests have extra whitespace in markup (i.e. between attribute declarations)
+    //  then the files may not match. It's important to structure the unit tests so that they don't have extra markup whitespace. All non-markup whitespace
+    //  should be duplicated correctly - i.e CHARDATA in between tags and other elements.
+    size_t nbyOutput, nbyGolden;
+    FileMappingObj fmoOutput( _FmoOpen( _rpathOutputFile, nbyOutput ) );
+    FileMappingObj fmoGolden( _FmoOpen( _pvtGoldenFile->second, nbyGolden ) );
+    // Move through even if the files don't match in size to find the first byte where they don't match for diag purposes.
+    // Can't map zero size files so we know we don't have any...
+    const uint8_t * pbyOutputCur = fmoOutput.Pby();
+    const uint8_t * const pbyOutputEnd = pbyOutputCur + nbyOutput;
+    const uint8_t * pbyGoldenCur = fmoGolden.Pby();
+    const uint8_t * const pbyGoldenEnd = pbyGoldenCur + nbyGolden;
+    for ( ; ( pbyOutputEnd != pbyOutputCur ) && ( pbyGoldenEnd != pbyGoldenCur ); ++pbyOutputCur, ++pbyGoldenCur )
+    {
+      Assert( *pbyOutputCur == *pbyGoldenCur );
+      VerifyThrowSz( *pbyOutputCur == *pbyGoldenCur, "Mismatch at byte number [%lu] outputfile[%s] goldenfile[%s].", ( pbyOutputCur - fmoOutput.Pby() ), 
+         _rpathOutputFile.string().c_str(), _pvtGoldenFile->second.c_str() );
+    }
+  }
+  FileMappingObj _FmoOpen( filesystem::path const & _rpathFile, size_t & _rnbySize )
+  {
+    FileObj fo( OpenReadOnlyFile( _rpathFile.string().c_str() ) );
+    VerifyThrowSz( fo.FIsOpen(), "Unable to open file [%s].", _rpathFile.string().c_str() );
+    FileMappingObj fmo( MapReadOnlyHandle( fo.HFileGet(), &_rnbySize ) );
+    VerifyThrowSz( fmo.FIsOpen(), "Couldn't map file [%s]", _rpathFile.string().c_str() );
+    return fmo;
   }
    
   string m_strFileNameOrig;
@@ -269,6 +298,8 @@ protected:
       xmlDoc.AssertValid();
     }
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
+    if ( vkfDontTestXmlWrite )
+      return;
     // Since we succeeded we test writing and then we compare the results.
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
@@ -703,9 +734,23 @@ int _TryMain( int argc, char **argv )
 
 int main( int argc, char **argv )
 {
+#ifdef WIN32
+	_CrtSetDbgFlag ( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
+#endif //WIN32
   __BIENUTIL_USING_NAMESPACE
 
   g_strProgramName = argv[0];
+#ifdef WIN32
+  {//B
+    // Sometimes in windows we get called from cmake and the path is using Linux path separators:
+    std::filesystem::path pathProgramName( g_strProgramName );
+    g_strProgramName = pathProgramName.lexically_normal().string().c_str();
+  }//EB
+#endif WIN32
+	n_SysLog::InitSysLog( g_strProgramName.c_str(),  
+		LOG_PERROR, LOG_USER
+	);
+
   testing::InitGoogleTest(&argc, argv);
   try
   {

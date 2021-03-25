@@ -4,6 +4,6 @@
 <?ProcessingInstruction2?>
 <attributePath xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File" xmlns="http://jazz.net/xmlns/alm/qm/v0.1/catalog/v0.1">
   <tag2 xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File" xmlns="">
-    <tag3 foo:zoo="12323&#x27;" />
+    <tag3 foo:zoo="12323&#x27;"/>
   </tag2>
 </attributePath>

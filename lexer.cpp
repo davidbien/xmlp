@@ -67,11 +67,7 @@ TryMain( int argc, char ** argv )
 {
 	g_strProgramName = *argv;
 	n_SysLog::InitSysLog( argv[0],
-#ifndef WIN32
-		/* LOG_PERROR */0, LOG_USER
-#else
-		0, 0
-#endif
+		 LOG_PERROR, LOG_USER
 	);
 
 	__XMLP_USING_NAMESPACE
