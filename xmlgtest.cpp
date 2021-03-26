@@ -311,31 +311,31 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDoc< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
         }
         break;
         default:
@@ -345,7 +345,7 @@ protected:
     }
   }
   template < class t_TyXmlWriteTransport >
-  void _WriteXmlDoc( xml_document< _TyXmlTraits > const & _rxd, filesystem::path _pathOutputPath, const _TyMapTestFiles::value_type * _pvtGoldenFile )
+  void _WriteXmlDocToFile( xml_document< _TyXmlTraits > const & _rxd, filesystem::path _pathOutputPath, const _TyMapTestFiles::value_type * _pvtGoldenFile )
   {
     typedef xml_writer< t_TyXmlWriteTransport > _TyXmlWriter;
     _rxd.AssertValid();
@@ -366,7 +366,6 @@ protected:
     // Now compare the two files:
     vpxteXmlpTestEnvironment->CompareFiles( _pathOutputPath, _pvtGoldenFile );
   }
-
   template < template < class ... > class t_tempTransport >
   void TestParserFileTransportVar()
   {
@@ -414,10 +413,78 @@ protected:
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
     _TyXmlParser xmlParser;
     _TyReadCursor xmlReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
-    _TyXmlDoc xmlDocVar;
-    xmlDocVar.FromXmlStream( xmlReadCursor );
+    _TyXmlDoc xmlDoc;
+    xmlDoc.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
-
+    if ( vkfDontTestXmlWrite )
+      return;
+    // Since we succeeded we test writing and then we compare the results.
+    size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
+    while( grfOutputFiles )
+    {
+      const _TyMapTestFiles::value_type * pvtGoldenFile;
+      filesystem::path pathOutput = vpxteXmlpTestEnvironment->GetNextFileNameOutput( m_pathOutputDir, grfOutputFiles, pvtGoldenFile );
+      switch( pvtGoldenFile->first.first )
+      {
+        case efceUTF8:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        case efceUTF16BE:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        case efceUTF16LE:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        case efceUTF32BE:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        case efceUTF32LE:
+        {
+          typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDoc, pathOutput, pvtGoldenFile );
+        }
+        break;
+        default:
+          VerifyThrow( false );
+        break;
+      }
+    }
+  }
+  template < class t_TyXmlWriteTransport >
+  void _WriteXmlDocToMemory( xml_document< _TyXmlTraits > const & _rxd, filesystem::path _pathOutputPath, const _TyMapTestFiles::value_type * _pvtGoldenFile )
+  {
+    // We'll write the memstream to the file so that we test that part of the MemStream impl as well and then we can have a look
+    //  at whatever might be wrong also.
+    typedef xml_writer< t_TyXmlWriteTransport > _TyXmlWriter;
+    _rxd.AssertValid();
+    {//B
+      _TyXmlWriter xwWriter;
+      xwWriter.SetWriteBOM( _pvtGoldenFile->first.second );
+      xwWriter.SetWriteXMLDecl( !_rxd.FPseudoXMLDecl() ); // Only write the XMLDecl if we got one in the source.
+      // For this test we won't rewrite the encoding with any new encoding value - we'll just leave it the same.
+      // The default operation (and we will test this elsewhere) will be to write the current encoding into the encoding="" statement.
+      typedef typename _TyXmlWriter::_TyXMLDeclProperties _TyXMLDeclProperties;
+      _TyXMLDeclProperties xdpTranslated( _rxd.GetXMLDeclProperties() );
+      
+      // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
+      //  for encoding of course. This is the nature of the current unit test.
+      xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
+      _rxd.ToXmlStream( xwWriter );
+    }//EB
+    // Now compare the two files:
+    vpxteXmlpTestEnvironment->CompareFiles( _pathOutputPath, _pvtGoldenFile );
   }
   template < template < class ... > class t_tempTransport >
   void TestParserMemoryTransportVar()
@@ -453,9 +520,11 @@ public:
   bool m_fExpectFailure{false}; // We should only succeed on two types of the ten for this test. On the others we expect failure. Also the test itself may be a failure type test.
 };
 
-// Test single transport type parser types: 1) Files.
+// Test single transport type parser types:
+// For each of these we test the corresponding xml_writer type.
 // NSE: NoSwitchEndian: ends up being UTF16LE on a little endian machine.
 // SE: SwitchEndian
+ // 1) Files.
 typedef XmlpTestParser< xml_traits< _l_transport_file< char8_t, false_type >, false, false > > vTyTestFileTransportUTF8;
 TEST_P( vTyTestFileTransportUTF8, TestFileTransportUTF8 ) { TestParserFile(); }
 typedef XmlpTestParser< xml_traits< _l_transport_file< char16_t, false_type >, false, false > > vTyTestFileTransportUTF16_NSE;
@@ -501,7 +570,7 @@ INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransportUT
 INSTANTIATE_TEST_SUITE_P( TestXmlParserMappedTransport, vTyTestMappedTransportUTF32_SE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
                           //Combine( Values(true), Values( int(efceUTF32LE) ) ) );
-// 3) Memory.
+// 3) Memory. We use fixed memory input and memstream output for these.
 typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char8_t, false_type >, false, false > > vTyTestMemoryTransportUTF8;
 TEST_P( vTyTestMemoryTransportUTF8, TestMemoryTransportUTF8 ) { TestParserMemory(); }
 typedef XmlpTestParser< xml_traits< _l_transport_fixedmem< char16_t, false_type >, false, false > > vTyTestMemoryTransportUTF16_NSE;
@@ -523,7 +592,6 @@ INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransport, vTyTestMemoryTransportUT
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
 INSTANTIATE_TEST_SUITE_P( TestXmlParserMemoryTransport, vTyTestMemoryTransportUTF32_SE,
                           Combine( Bool(), Values( int(efceUTF8), int(efceUTF16BE), int(efceUTF16LE), int(efceUTF32BE), int(efceUTF32LE) ) ) );
-
 
 typedef _l_transport_var< _l_transport_file< char8_t, false_type >, _l_transport_mapped< char8_t, false_type >, _l_transport_fixedmem< char8_t, false_type > > vTyTransportVarChar8;
 typedef XmlpTestParser< xml_traits< vTyTransportVarChar8, false, false > > vTyTestVarTransportUTF8;
