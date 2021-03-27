@@ -480,8 +480,13 @@ protected:
       
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
       //  for encoding of course. This is the nature of the current unit test.
-      xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
+      xwWriter.OpenMemFile( xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
       _rxd.ToXmlStream( xwWriter );
+
+      // Now open the file and write the memstream to the file:
+      FileObj fo( CreateWriteOnlyFile( _pathOutputPath.string().c_str() ) );
+      VerifyThrowSz( fo.FIsOpen(), "Couldn't open output file [%s].", _pathOutputPath.string().c_str() );
+      xwWriter.GetTransportOut().GetMemStream().WriteToFile( fo.HFileGet(), 0, xwWriter.GetTransportOut().GetMemStream().GetEndPos() );
     }//EB
     // Now compare the two files:
     vpxteXmlpTestEnvironment->CompareFiles( _pathOutputPath, _pvtGoldenFile );
