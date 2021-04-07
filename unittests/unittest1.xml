@@ -7,3 +7,6 @@
     <tag3 foo:zoo="12323&#x27;"/>
   </tag2>
 </attributePath>
+<!-- comment 2 -->
+<?ProcessingInstruction3 I would like this to happen here. ?>
+<?ProcessingInstruction4?>
