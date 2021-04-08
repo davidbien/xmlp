@@ -58,32 +58,6 @@ target_compile_definitions( lexer
   PUBLIC __NDEBUG_THROW
 )
 
-add_executable (xmlgtest xmlgtest.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
-target_include_directories(xmlgtest PUBLIC
-  ${CMAKE_CURRENT_BINARY_DIR}
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
-)
-target_link_libraries(xmlgtest gtest gtest_main)
-target_compile_definitions( xmlgtest
-  PUBLIC __NDEBUG_THROW
-  PUBLIC TRACESENABLED=0
-  # PUBLIC ASSERTSENABLED=1
-)
-
-# We may not notice new unittests until CMakeLists.txt is rebuilt - that's ok.
-file(GLOB XMLUNITTESTS LIST_DIRECTORIES true unittests/*.xml )
-foreach( XMLTEST ${XMLUNITTESTS} )
-get_filename_component( XMLTEST_NAME ${XMLTEST} NAME_WE )
-message("Unit test: ${XMLTEST_NAME}")    
-gtest_discover_tests(xmlgtest
-                    EXTRA_ARGS  ${XMLTEST}
-                    TEST_SUFFIX .${XMLTEST_NAME}
-)
-endforeach()
-
 add_executable (xmlpgtest_cursorcopy xmlpgtest_cursorcopy.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 target_include_directories(xmlpgtest_cursorcopy PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
@@ -109,6 +83,34 @@ gtest_discover_tests(xmlpgtest_cursorcopy
                     TEST_SUFFIX .${XMLTEST_NAME}
 )
 endforeach()
+
+if(1)
+add_executable (xmlgtest xmlgtest.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+target_include_directories(xmlgtest PUBLIC
+  ${CMAKE_CURRENT_BINARY_DIR}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
+)
+target_link_libraries(xmlgtest gtest gtest_main)
+target_compile_definitions( xmlgtest
+  PUBLIC __NDEBUG_THROW
+  PUBLIC TRACESENABLED=0
+  # PUBLIC ASSERTSENABLED=1
+)
+
+# We may not notice new unittests until CMakeLists.txt is rebuilt - that's ok.
+file(GLOB XMLUNITTESTS LIST_DIRECTORIES true unittests/*.xml )
+foreach( XMLTEST ${XMLUNITTESTS} )
+get_filename_component( XMLTEST_NAME ${XMLTEST} NAME_WE )
+message("Unit test: ${XMLTEST_NAME}")    
+gtest_discover_tests(xmlgtest
+                    EXTRA_ARGS  ${XMLTEST}
+                    TEST_SUFFIX .${XMLTEST_NAME}
+)
+endforeach()
+endif(1)
 
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 #setup internal submodule include directories.

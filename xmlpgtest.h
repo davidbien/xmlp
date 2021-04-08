@@ -5,6 +5,8 @@
 // dbien
 // 06APR2021
 
+extern std::string g_strProgramName;
+
 namespace ns_XMLGTest
 {
 __XMLP_USING_NAMESPACE
@@ -106,6 +108,7 @@ public:
     const ::testing::TestInfo* const test_info =
     ::testing::UnitTest::GetInstance()->current_test_info();
     path pathSuite = m_pathBaseFile;
+    pathSuite /= path( g_strProgramName ).stem(); // since we have multiple unit test files now.
     pathSuite /= test_info->test_suite_name();
     path pathTest = test_info->name();
     path::iterator itTestNum = --pathTest.end();

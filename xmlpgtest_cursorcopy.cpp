@@ -114,8 +114,6 @@ protected:
   void _TryTestParserFile()
   {
     typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
-    _TyXmlParser xmlParser;
-    _TyReadCursor xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -126,30 +124,40 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -201,9 +209,6 @@ protected:
   void _TryTestParserFileTransportVar()
   {
     typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
-    _TyXmlParser xmlParser;
-    _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
-    // Since we succeeded we test writing and then we compare the results.
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -215,30 +220,40 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -267,9 +282,6 @@ protected:
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
-    _TyXmlParser xmlParser;
-    _TyReadCursor xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
-    // Since we succeeded we test writing and then we compare the results.
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -280,30 +292,40 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -365,10 +387,6 @@ protected:
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
-    typedef xml_document< _TyXmlTraits > _TyXmlDoc;
-    _TyXmlParser xmlParser;
-    _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
-    // Since we succeeded we test writing and then we compare the results.
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -380,30 +398,40 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -574,11 +602,7 @@ protected:
   }
   void _TryTestParserFile()
   {
-    _TyXmlParser xmlParser;
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
-    typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
-    _TyReadCursorVar xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
-    // Since we succeeded we test writing and then we compare the results.
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -590,30 +614,40 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -665,11 +699,7 @@ protected:
   template < template < class ... > class t_tempTransport >
   void _TryTestParserFileTransportVar()
   {
-    _TyXmlParser xmlParser;
     typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
-    typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
-    _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
-    // Since we succeeded we test writing and then we compare the results.
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -681,30 +711,40 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -732,11 +772,7 @@ protected:
     FileMappingObj fmo;
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
-    _TyXmlParser xmlParser;
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
-    typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
-    _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
-    // Since we succeeded we test writing and then we compare the results.
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -748,30 +784,40 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -833,11 +879,7 @@ protected:
     FileMappingObj fmo;
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
-    _TyXmlParser xmlParser;
     typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
-    typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
-    _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
-    // Since we succeeded we test writing and then we compare the results.
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -849,30 +891,40 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
+          _TyXmlParser xmlParser;
+          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
