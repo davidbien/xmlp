@@ -208,7 +208,7 @@ protected:
   template < template < class ... > class t_tempTransport >
   void _TryTestParserFileTransportVar()
   {
-    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -221,7 +221,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -229,7 +229,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -237,7 +237,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -245,7 +245,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -253,7 +253,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -386,7 +386,7 @@ protected:
     FileMappingObj fmo;
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
-    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -399,7 +399,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -407,7 +407,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -415,7 +415,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -423,7 +423,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -431,7 +431,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursor xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursor xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -699,7 +699,7 @@ protected:
   template < template < class ... > class t_tempTransport >
   void _TryTestParserFileTransportVar()
   {
-    typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
+    typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -712,7 +712,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -720,7 +720,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -728,7 +728,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -736,7 +736,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -744,7 +744,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
           _WriteCursorToFile< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -879,7 +879,7 @@ protected:
     FileMappingObj fmo;
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
-    typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
+    typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
     while( grfOutputFiles )
     {
@@ -892,7 +892,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -900,7 +900,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -908,7 +908,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -916,7 +916,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -924,7 +924,7 @@ protected:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
           _TyXmlParser xmlParser;
-          _TyReadCursorVar xrcReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+          _TyReadCursorVar xrcReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
           _WriteCursorToMemory< _TyXmlWriteTransport >( xrcReadCursor, pathOutput, pvtGoldenFile );
         }
         break;
@@ -1004,7 +1004,7 @@ int main( int argc, char **argv )
     std::filesystem::path pathProgramName( g_strProgramName );
     g_strProgramName = pathProgramName.lexically_normal().string().c_str();
   }//EB
-#endif WIN32
+#endif //WIN32
 	n_SysLog::InitSysLog( g_strProgramName.c_str(),  
 		LOG_PERROR, LOG_USER
 	);

@@ -115,7 +115,7 @@ protected:
   }
   void _TryTestParserFile()
   {
-    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
     _TyXmlDoc xmlDoc;
     {
@@ -210,10 +210,10 @@ protected:
   template < template < class ... > class t_tempTransport >
   void _TryTestParserFileTransportVar()
   {
-    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
     _TyXmlParser xmlParser;
-    _TyReadCursor xmlReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+    _TyReadCursor xmlReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
     _TyXmlDoc xmlDoc;
     xmlDoc.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
@@ -282,7 +282,7 @@ protected:
     FileMappingObj fmo;
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
-    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
     _TyXmlParser xmlParser;
     _TyReadCursor xmlReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
@@ -384,10 +384,10 @@ protected:
     FileMappingObj fmo;
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
-    typedef _TyXmlParser::_TyReadCursor _TyReadCursor;
+    typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
     _TyXmlParser xmlParser;
-    _TyReadCursor xmlReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+    _TyReadCursor xmlReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
     _TyXmlDoc xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
@@ -695,10 +695,10 @@ protected:
   void _TryTestParserFileTransportVar()
   {
     _TyXmlParser xmlParser;
-    typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
-    typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
+    typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
+    typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
     typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
-    _TyReadCursorVar xmlReadCursor = xmlParser.OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
+    _TyReadCursorVar xmlReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
     _TyXmlDocVar xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
@@ -768,8 +768,8 @@ protected:
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     _TyXmlParser xmlParser;
-    typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
-    typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
+    typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
+    typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
     typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
     _TyReadCursorVar xmlReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
     _TyXmlDocVar xmlDocVar;
@@ -873,10 +873,10 @@ protected:
     size_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     _TyXmlParser xmlParser;
-    typedef _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
-    typedef _TyXmlParser::_TyTpTransports _TyTpTransports;
+    typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
+    typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
     typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
-    _TyReadCursorVar xmlReadCursor = xmlParser.OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
+    _TyReadCursorVar xmlReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
     _TyXmlDocVar xmlDocVar;
     xmlDocVar.FromXmlStream( xmlReadCursor );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
@@ -997,7 +997,7 @@ int main( int argc, char **argv )
     std::filesystem::path pathProgramName( g_strProgramName );
     g_strProgramName = pathProgramName.lexically_normal().string().c_str();
   }//EB
-#endif WIN32
+#endif //WIN32
 	n_SysLog::InitSysLog( g_strProgramName.c_str(),  
 		LOG_PERROR, LOG_USER
 	);
