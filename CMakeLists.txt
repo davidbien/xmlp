@@ -84,7 +84,6 @@ gtest_discover_tests(xmlpgtest_cursorcopy
 )
 endforeach()
 
-if(1)
 add_executable (xmlgtest xmlgtest.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 target_include_directories(xmlgtest PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
@@ -110,7 +109,6 @@ gtest_discover_tests(xmlgtest
                     TEST_SUFFIX .${XMLTEST_NAME}
 )
 endforeach()
-endif(1)
 
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 #setup internal submodule include directories.
