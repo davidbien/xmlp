@@ -46,6 +46,27 @@
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "linux_clang_x64" ],
       "wslPath": "${defaultWSLPath}",
+      "addressSanitizerRuntimeFlags": "detect_leaks=1",
+      "variables": [
+        {
+          "name": "CMAKE_CXX_FLAGS",
+          "value": "-fno-limit-debug-info -stdlib=libc++",
+          "type": "STRING"
+        }
+      ]
+    },
+    {
+      "name": "WSL-Clang-Release",
+      "generator": "Unix Makefiles",
+      "configurationType": "MinSizeRel",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeExecutable": "cmake",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "linux_clang_x64" ],
+      "wslPath": "${defaultWSLPath}",
       "addressSanitizerRuntimeFlags": "detect_leaks=0",
       "variables": [
         {
