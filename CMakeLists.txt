@@ -84,16 +84,16 @@ gtest_discover_tests(xmlpgtest_cursorcopy
 )
 endforeach()
 
-add_executable (xmlgtest xmlgtest.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
-target_include_directories(xmlgtest PUBLIC
+add_executable (xmlpgtest_doccopy xmlpgtest_doccopy.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+target_include_directories(xmlpgtest_doccopy PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
 )
-target_link_libraries(xmlgtest gtest gtest_main)
-target_compile_definitions( xmlgtest
+target_link_libraries(xmlpgtest_doccopy gtest gtest_main)
+target_compile_definitions( xmlpgtest_doccopy
   PUBLIC __NDEBUG_THROW
   PUBLIC TRACESENABLED=0
   # PUBLIC ASSERTSENABLED=1
@@ -104,7 +104,7 @@ file(GLOB XMLUNITTESTS LIST_DIRECTORIES true unittests/*.xml )
 foreach( XMLTEST ${XMLUNITTESTS} )
 get_filename_component( XMLTEST_NAME ${XMLTEST} NAME_WE )
 message("Unit test: ${XMLTEST_NAME}")    
-gtest_discover_tests(xmlgtest
+gtest_discover_tests(xmlpgtest_doccopy
                     EXTRA_ARGS  ${XMLTEST}
                     TEST_SUFFIX .${XMLTEST_NAME}
 )
