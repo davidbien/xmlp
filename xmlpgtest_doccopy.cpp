@@ -73,6 +73,7 @@ protected:
   // SetUp() is run immediately before a test starts.
   void SetUp() override 
   {
+    VerifyThrowSz( !!vpxteXmlpTestEnvironment, "No test environment - are you debugging without passing in a filename?" );
     m_pathOutputDir = vpxteXmlpTestEnvironment->PathCreateUnitTestOutputDirectory();
     _TyKeyEncodingBOM keyTestFile;
     std::tie(keyTestFile.second, (int&)keyTestFile.first) = GetParam();
@@ -573,6 +574,7 @@ protected:
   // SetUp() is run immediately before a test starts.
   void SetUp() override 
   {
+    VerifyThrowSz( !!vpxteXmlpTestEnvironment, "No test environment - are you debugging without passing in a filename?" );
     m_pathOutputDir = vpxteXmlpTestEnvironment->PathCreateUnitTestOutputDirectory();
     _TyKeyEncodingBOM keyTestFile;
     std::tie(keyTestFile.second, (int&)keyTestFile.first) = GetParam();
