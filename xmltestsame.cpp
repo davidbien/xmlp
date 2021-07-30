@@ -92,8 +92,9 @@ TryMain( int argc, char ** argv )
   // Open the file:
 	_TyXmlReadCursor xmlReadCursor = xmlParser.OpenFileVar< _l_transport_file >( argv[1] );
   typedef xml_document_var< _TyXmlParser::_TyTpTransports > _TyXmlDocument;
-  _TyXmlDocument xmlDocument;
-  xmlDocument.FromXmlStream( xmlReadCursor );
+  auto prXmlDoc = _TyXmlDocument::PrCreateXmlDocument();
+  _TyXmlDocument * pXmlDoc = prXmlDoc.first; // We store this separately for now - need to come up with a class infrastructure to store this paradigm.
+  pXmlDoc->FromXmlStream( xmlReadCursor, prXmlDoc.second );
 
 	return 0;
 }

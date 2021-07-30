@@ -608,11 +608,12 @@ protected:
   {
     _TyXmlParser xmlParser;
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
-    typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
-    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+    typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;    
     _TyReadCursorVar xmlReadCursor = xmlParser.OpenFile( m_citTestFile->second.c_str() );
-    _TyXmlDocVar xmlDocVar;
-    xmlDocVar.FromXmlStream( xmlReadCursor );
+    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+    auto prXmlDoc = _TyXmlDocVar::PrCreateXmlDocument();
+    _TyXmlDocVar * pXmlDocVar = prXmlDoc.first; // We store this separately for now - need to come up with a class infrastructure to store this paradigm.
+    pXmlDocVar->FromXmlStream( xmlReadCursor, prXmlDoc.second );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
     if ( vkfDontTestXmlWrite )
       return;
@@ -628,31 +629,31 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         default:
@@ -704,10 +705,11 @@ protected:
     _TyXmlParser xmlParser;
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
     typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
-    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
     _TyReadCursorVar xmlReadCursor = xmlParser.template OpenFileVar< t_tempTransport >( m_citTestFile->second.c_str() );
-    _TyXmlDocVar xmlDocVar;
-    xmlDocVar.FromXmlStream( xmlReadCursor );
+    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+    auto prXmlDoc = _TyXmlDocVar::PrCreateXmlDocument();
+    _TyXmlDocVar * pXmlDocVar = prXmlDoc.first; // We store this separately for now - need to come up with a class infrastructure to store this paradigm.
+    pXmlDocVar->FromXmlStream( xmlReadCursor, prXmlDoc.second );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
     if ( vkfDontTestXmlWrite )
       return;
@@ -723,31 +725,31 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToFile< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToFile< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         default:
@@ -777,10 +779,11 @@ protected:
     _TyXmlParser xmlParser;
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
     typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
-    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
     _TyReadCursorVar xmlReadCursor = xmlParser.OpenMemory( fmo.Pv(), nbySizeBytes );
-    _TyXmlDocVar xmlDocVar;
-    xmlDocVar.FromXmlStream( xmlReadCursor );
+    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+    auto prXmlDoc = _TyXmlDocVar::PrCreateXmlDocument();
+    _TyXmlDocVar * pXmlDocVar = prXmlDoc.first; // We store this separately for now - need to come up with a class infrastructure to store this paradigm.
+    pXmlDocVar->FromXmlStream( xmlReadCursor, prXmlDoc.second );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
     if ( vkfDontTestXmlWrite )
       return;
@@ -796,31 +799,31 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         default:
@@ -882,10 +885,11 @@ protected:
     _TyXmlParser xmlParser;
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
     typedef typename _TyXmlParser::_TyTpTransports _TyTpTransports;
-    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
     _TyReadCursorVar xmlReadCursor = xmlParser.template OpenMemoryVar< t_tempTransport >( fmo.Pv(), nbySizeBytes );
-    _TyXmlDocVar xmlDocVar;
-    xmlDocVar.FromXmlStream( xmlReadCursor );
+    typedef xml_document_var< _TyTpTransports > _TyXmlDocVar;
+    auto prXmlDoc = _TyXmlDocVar::PrCreateXmlDocument();
+    _TyXmlDocVar * pXmlDocVar = prXmlDoc.first; // We store this separately for now - need to come up with a class infrastructure to store this paradigm.
+    pXmlDocVar->FromXmlStream( xmlReadCursor, prXmlDoc.second );
     VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
     if ( vkfDontTestXmlWrite )
       return;
@@ -901,31 +905,31 @@ protected:
         case efceUTF8:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char8_t, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF16LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char16_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32BE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsLittleEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         case efceUTF32LE:
         {
           typedef typename map_input_to_any_output_transport< _TyTransport, char32_t, integral_constant< bool, vkfIsBigEndian > >::_TyXmlWriteTransport _TyXmlWriteTransport;
-          _WriteXmlDocToMemory< _TyXmlWriteTransport >( xmlDocVar, pathOutput, pvtGoldenFile );
+          _WriteXmlDocToMemory< _TyXmlWriteTransport >( *pXmlDocVar, pathOutput, pvtGoldenFile );
         }
         break;
         default:
