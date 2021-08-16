@@ -2,10 +2,6 @@
 	"folders": [
 		{
 			"path": "."
-		},
-		{
-			"name": "bienutil @ e4d7ff7",
-			"uri": "gitlens://e4d7ff7/c:/dv/xmlp/bienutil?{\"path\":\"/c:/dv/xmlp/bienutil\",\"ref\":\"e4d7ff79779c7ac76fa957bd7b67d17caee65df7\",\"repoPath\":\"c:/dv/xmlp/bienutil\"}"
 		}
 	],
 	"settings": {
