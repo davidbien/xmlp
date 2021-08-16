@@ -58,7 +58,7 @@ target_compile_definitions( lexer
   PUBLIC __NDEBUG_THROW
 )
 
-if(0)
+if(1)
 add_executable (xmlpgtest_cursorcopy xmlpgtest_cursorcopy.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 target_include_directories(xmlpgtest_cursorcopy PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
@@ -84,7 +84,7 @@ gtest_discover_tests(xmlpgtest_cursorcopy
                     TEST_SUFFIX .${XMLTEST_NAME}
 )
 endforeach()
-endif(0)
+endif(1)
 
 add_executable (xmlpgtest_doccopy xmlpgtest_doccopy.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 target_include_directories(xmlpgtest_doccopy PUBLIC
