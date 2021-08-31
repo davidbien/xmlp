@@ -31,9 +31,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "syslogmgr.inl"
 #include "_compat.inl"
 #include "xml_traits.h"
-#include "_xmlplex_utf32.h"
-#include "_xmlplex_utf16.h"
-#include "_xmlplex_utf8.h"
+#include "xml_parse.h"
 
 __BIENUTIL_USING_NAMESPACE
 
