@@ -48,54 +48,54 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 
 	_TyFinal NameCharNoColon = NameStartCharNoColon | l(u8'-') | l(u8'.') | lr(u8'0',u8'9') | lr(0x80,0xBF);	// [4a]
 	_TyFinal NCName = NameStartCharNoColon * ~NameCharNoColon;
-	_TyFinal	Prefix = NCName;
-	_TyFinal	LocalPart = NCName;
+	_TyFinal Prefix = NCName;
+	_TyFinal LocalPart = NCName;
 
 // Qualified name:
-	_TyFinal	QName = t(TyGetTriggerPrefixBegin<_TyLexT>()) * Prefix * t(TyGetTriggerPrefixEnd<_TyLexT>()) * --( l(u8':')	* t( TyGetTriggerLocalPartBegin<_TyLexT>() ) * LocalPart * t( TyGetTriggerLocalPartEnd<_TyLexT>() ) );
+	_TyFinal QName = t(TyGetTriggerPrefixBegin<_TyLexT>()) * Prefix * t(TyGetTriggerPrefixEnd<_TyLexT>()) * --( l(u8':')	* t( TyGetTriggerLocalPartBegin<_TyLexT>() ) * LocalPart * t( TyGetTriggerLocalPartEnd<_TyLexT>() ) );
 #if 0 // We have to rid these because they match the QName production and therefore they cause trigger confusion. We'll have to check in post-processing for xmlns as the prefix.
 	_TyFinal	DefaultAttName = ls(u8"xmlns") /* * t( TyGetTriggerDefaultAttName<_TyLexT>() ) */;
-	_TyFinal	PrefixedAttName = ls(u8"xmlns:") * t( TyGetTriggerPrefixedAttNameBegin<_TyLexT>() ) * NCName * t( TyGetTriggerPrefixedAttNameEnd<_TyLexT>() );
-	_TyFinal	NSAttName = PrefixedAttName | DefaultAttName;
+	_TyFinal PrefixedAttName = ls(u8"xmlns:") * t( TyGetTriggerPrefixedAttNameBegin<_TyLexT>() ) * NCName * t( TyGetTriggerPrefixedAttNameEnd<_TyLexT>() );
+	_TyFinal NSAttName = PrefixedAttName | DefaultAttName;
 #endif //0
 
 // Attribute value and character data productions:
-	_TyFinal	EntityRef = l(u8'&') * t( TyGetTriggerEntityRefBegin<_TyLexT>() ) 	// [49]
+	_TyFinal EntityRef = l(u8'&') * t( TyGetTriggerEntityRefBegin<_TyLexT>() ) 	// [49]
 																* Name * t( TyGetTriggerEntityRefEnd<_TyLexT>() ) * l(u8';');
-	_TyFinal	CharRefDecData = ++lr(u8'0',u8'9');
-	_TyFinal	CharRefHexData = ++( lr(u8'0',u8'9') | lr(u8'A',u8'F') | lr(u8'a',u8'f') );
-  _TyFinal	CharRefDec = ls(u8"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() ) * CharRefDecData * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(u8';');
-  _TyFinal	CharRefHex = ls(u8"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * CharRefHexData * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(u8';');
-	_TyFinal	CharRef = CharRefDec | CharRefHex; // [66]
-	_TyFinal	Reference = EntityRef | CharRef;	// [67]
+	_TyFinal CharRefDecData = ++lr(u8'0',u8'9');
+	_TyFinal CharRefHexData = ++( lr(u8'0',u8'9') | lr(u8'A',u8'F') | lr(u8'a',u8'f') );
+  _TyFinal CharRefDec = ls(u8"&#") * t( TyGetTriggerCharDecRefBegin<_TyLexT>() ) * CharRefDecData * t( TyGetTriggerCharDecRefEnd<_TyLexT>()  ) * l(u8';');
+  _TyFinal CharRefHex = ls(u8"&#x") * t( TyGetTriggerCharHexRefBegin<_TyLexT>() ) * CharRefHexData * t( TyGetTriggerCharHexRefEnd<_TyLexT>() ) * l(u8';');
+	_TyFinal CharRef = CharRefDec | CharRefHex; // [66]
+	_TyFinal Reference = EntityRef | CharRef;	// [67]
   
 	// We use the same triggers for these just to save implementation space and because we know by the final trigger
 	//	whether a single or double quote was present.
-	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(u8"&<\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
-	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++lnot(u8"&<\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
-	_TyFinal	AttCharDataNoDoubleQuoteOutputValidate = ~lnot(u8"&<\"");
-	_TyFinal	AttCharDataNoSingleQuoteOutputValidate = ~lnot(u8"&<\'");
+	_TyFinal _AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(u8"&<\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
+	_TyFinal _AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++lnot(u8"&<\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
+	_TyFinal AttCharDataNoDoubleQuoteOutputValidate = ~lnot(u8"&<\"");
+	_TyFinal AttCharDataNoSingleQuoteOutputValidate = ~lnot(u8"&<\'");
 	// We need only record whether single or double quotes were used as a convenience to any reader/writer system that may want to duplicate the current manner of quoting.
-	_TyFinal	AttValue =	l(u8'\"') * t( TyGetTriggerAttValueDoubleQuote<_TyLexT>() ) * ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(u8'\"') |	// [10]
-												l(u8'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(u8'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
-	_TyFinal	Attribute = /* NSAttName * Eq * AttValue | */ // [41]
+	_TyFinal AttValue =	l(u8'\"') * t( TyGetTriggerAttValueDoubleQuote<_TyLexT>() ) * ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(u8'\"') |	// [10]
+											l(u8'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(u8'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
+	_TyFinal Attribute = /* NSAttName * Eq * AttValue | */ // [41]
 												QName * Eq * AttValue;
 
 // The various types of tags:
-  _TyFinal	STag = l(u8'<') * QName * t(TyGetTriggerSaveTagName<_TyLexT>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyLexT>()) ) * --S * l(u8'>'); // [12]
-	_TyFinal	ETag = ls(u8"</") * QName * --S * l(u8'>');// [13]
-  _TyFinal	EmptyElemTag = l(u8'<') * QName * t(TyGetTriggerSaveTagName<_TyLexT>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyLexT>()) ) * --S * ls(u8"/>");// [14]								
+  _TyFinal STag = l(u8'<') * QName * t(TyGetTriggerSaveTagName<_TyLexT>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyLexT>()) ) * --S * l(u8'>'); // [12]
+	_TyFinal ETag = ls(u8"</") * QName * --S * l(u8'>');// [13]
+  _TyFinal EmptyElemTag = l(u8'<') * QName * t(TyGetTriggerSaveTagName<_TyLexT>()) * ~( S * Attribute * t(TyGetTriggerSaveAttributes<_TyLexT>()) ) * --S * ls(u8"/>");// [14]								
 
 // Processsing instruction:
-	_TyFinal	PITarget = Name - ( ( ( l(u8'x') | l(u8'X') ) * ( l(u8'm') | l(u8'M') ) * ( l(u8'l') | l(u8'L') ) ) ); // This produces an anti-accepting state for "xml" or "XML" (or "xMl", ...).
-	_TyFinal	PITargetMeat = ~Char;
-	_TyFinal	PI = ls(u8"<?")	* t( TyGetTriggerPITargetStart<_TyLexT>() ) * PITarget * t( TyGetTriggerPITargetEnd<_TyLexT>() )
+	_TyFinal PITarget = Name - ( ( ( l(u8'x') | l(u8'X') ) * ( l(u8'm') | l(u8'M') ) * ( l(u8'l') | l(u8'L') ) ) ); // This produces an anti-accepting state for "xml" or "XML" (or "xMl", ...).
+	_TyFinal PITargetMeat = ~Char;
+	_TyFinal PI = ls(u8"<?")	* t( TyGetTriggerPITargetStart<_TyLexT>() ) * PITarget * t( TyGetTriggerPITargetEnd<_TyLexT>() )
 			* ( ls(u8"?>") | ( S * t( TyGetTriggerPITargetMeatBegin<_TyLexT>() ) * ( PITargetMeat + ls(u8"?>") ) ) );
 	// For output validation we need to ensure that we don't encounter a "?>" in the midst of the PITargetMeat:
-	_TyFinal	PITargetMeatOutputValidate = ~Char - ( ~Char * ls(u8"?>") * ~Char );
+	_TyFinal PITargetMeatOutputValidate = ~Char - ( ~Char * ls(u8"?>") * ~Char );
 
 // Comment:
-	_TyFinal	_CharNoMinus =	l(0x09) | l(0x0a) | l(0x0d) | lr(0x020,0x02c) | lr(0x2e,0xff); // [2].
+	_TyFinal _CharNoMinus =	l(0x09) | l(0x0a) | l(0x0d) | lr(0x020,0x02c) | lr(0x2e,0xff); // [2].
 	// For a comment the end trigger was messing with the production since it kept the second '-'
 	_TyFinal CommentChars = ~(_CharNoMinus | (l(u8'-') * _CharNoMinus));
 	_TyFinal Comment = ls(u8"<!--") * CommentChars * ls(u8"-->");
@@ -123,26 +123,26 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 	// This is the statement of the specification that reflects this:
 	// "If there are external markup declarations but there is no standalone document declaration, the value 'no' is assumed."
 	// So we assume no and then the value is meaningless if there are no external declarations.
-	_TyFinal	_YesSDDecl = ls(u8"yes") * t(TyGetTriggerStandaloneYes<_TyLexT>());
-	_TyFinal	_NoSDDecl = ls(u8"no") * t(TyGetTriggerStandaloneNo<_TyLexT>()); // Need to record a "no" to know when the standalone declaration is not present at all.
-	_TyFinal	SDDecl = S * ls(u8"standalone") * Eq *		// [32]
+	_TyFinal _YesSDDecl = ls(u8"yes") * t(TyGetTriggerStandaloneYes<_TyLexT>());
+	_TyFinal _NoSDDecl = ls(u8"no") * t(TyGetTriggerStandaloneNo<_TyLexT>()); // Need to record a "no" to know when the standalone declaration is not present at all.
+	_TyFinal SDDecl = S * ls(u8"standalone") * Eq *		// [32]
 		( ( l(u8'\"') * t(TyGetTriggerStandaloneDoubleQuote<_TyLexT>()) * ( _YesSDDecl | _NoSDDecl ) * l(u8'\"') ) |
 			( l(u8'\'') * ( _YesSDDecl | _NoSDDecl ) * l(u8'\'') ) );
-	_TyFinal	EncName = ( lr(u8'A',u8'Z') | lr(u8'a',u8'z') ) * // [81]
+	_TyFinal EncName = ( lr(u8'A',u8'Z') | lr(u8'a',u8'z') ) * // [81]
 											~(	lr(u8'A',u8'Z') | lr(u8'a',u8'z') | 
 													lr(u8'0',u8'9') | l(u8'.') | l(u8'_') | l(u8'-') );
-	_TyFinal	_TrEncName =	t(TyGetTriggerEncodingNameBegin<_TyLexT>()) *  EncName * t(TyGetTriggerEncodingNameEnd<_TyLexT>());
-	_TyFinal	EncodingDecl = S * ls(u8"encoding") * Eq *			// [80].
+	_TyFinal _TrEncName =	t(TyGetTriggerEncodingNameBegin<_TyLexT>()) *  EncName * t(TyGetTriggerEncodingNameEnd<_TyLexT>());
+	_TyFinal EncodingDecl = S * ls(u8"encoding") * Eq *			// [80].
 			( l(u8'\"') * t( TyGetTriggerEncDeclDoubleQuote<_TyLexT>()) * _TrEncName * l(u8'\"') | 
 				l(u8'\'') * t( TyGetTriggerEncDeclSingleQuote<_TyLexT>()) * _TrEncName * l(u8'\'') ); // We need to record a trigger for the single quote to know whether the encoding decl is thaere at all.
 
-	_TyFinal	VersionNum = ls(u8"1.") * t(TyGetTriggerVersionNumBegin<_TyLexT>()) * ++lr(u8'0',u8'9') * t(TyGetTriggerVersionNumEnd<_TyLexT>());
-	_TyFinal	VersionInfo = S * ls(u8"version") * Eq * // [24]
+	_TyFinal VersionNum = ls(u8"1.") * t(TyGetTriggerVersionNumBegin<_TyLexT>()) * ++lr(u8'0',u8'9') * t(TyGetTriggerVersionNumEnd<_TyLexT>());
+	_TyFinal VersionInfo = S * ls(u8"version") * Eq * // [24]
 													(	l(u8'\"') * t(TyGetTriggerVersionNumDoubleQuote<_TyLexT>()) * VersionNum * l(u8'\"') |
 														l(u8'\'') * VersionNum * l(u8'\'') );
 
-	_TyFinal	XMLDecl = ls(u8"<?xml") * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(u8"?>"); // [23]
- 	_TyFinal	TextDecl = ls(u8"<?xml") * --VersionInfo * EncodingDecl * --S * ls(u8"?>"); //[77]
+	_TyFinal XMLDecl = ls(u8"<?xml") * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(u8"?>"); // [23]
+ 	_TyFinal TextDecl = ls(u8"<?xml") * --VersionInfo * EncodingDecl * --S * ls(u8"?>"); //[77]
 	// In order to have both the PI production (processing instruction) and the XMLDecl production in the same DFA you have to match them up initially - including the triggers - the same triggers.
 	// However I am just going to move XMLDecl and TextDecl to their own DFAs and only use them at the start of a file. This allows better validation at the same time.
 	//_TyFinal	XMLDecl = ls(u8"<?") * t( TyGetTriggerPITargetStart<_TyLexT>() ) * ls(u8"xml") * t( TyGetTriggerPITargetEnd<_TyLexT>() ) * VersionInfo * --EncodingDecl * --SDDecl * --S * ls(u8"?>"); // [23]
@@ -151,40 +151,40 @@ GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp )
 // DTD stuff:
 	_TyFinal PEReference = l(u8'%') * t(TyGetTriggerPEReferenceBegin<_TyLexT>()) * Name * t(TyGetTriggerPEReferenceEnd<_TyLexT>()) * l(u8';');
 // Mixed:
-	_TyFinal	_MixedBegin = l(u8'(') * --S * ls(u8"#PCDATA");
-	_TyFinal	_TriggeredMixedName = t( TyGetTriggerMixedNameBegin<_TyLexT>() ) * Name  * t( TyGetTriggerMixedNameEnd<_TyLexT>() );
-	_TyFinal	Mixed = _MixedBegin * ~( --S * l(u8'|') * --S * _TriggeredMixedName )
+	_TyFinal _MixedBegin = l(u8'(') * --S * ls(u8"#PCDATA");
+	_TyFinal _TriggeredMixedName = t( TyGetTriggerMixedNameBegin<_TyLexT>() ) * Name  * t( TyGetTriggerMixedNameEnd<_TyLexT>() );
+	_TyFinal Mixed = _MixedBegin * ~( --S * l(u8'|') * --S * _TriggeredMixedName )
 														* --S * ls(u8")*") |
 										_MixedBegin * --S * l(u8')'); // [51].
 // EntityDecl stuff:
-  _TyFinal	SystemLiteral =	l(u8'\"') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~lnot(u8"\"") * t(TyGetTriggerSystemLiteralDoubleQuoteEnd<_TyLexT>()) * l(u8'\"') | //[11]
+  _TyFinal SystemLiteral =	l(u8'\"') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~lnot(u8"\"") * t(TyGetTriggerSystemLiteralDoubleQuoteEnd<_TyLexT>()) * l(u8'\"') | //[11]
 														l(u8'\'') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~lnot(u8"\'") * t(TyGetTriggerSystemLiteralSingleQuoteEnd<_TyLexT>()) * l(u8'\'');
-	_TyFinal	PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(u8'a',u8'z') | lr(u8'A',u8'Z') | lr(u8'0',u8'9') | lanyof(u8"-()+,./:=?;!*#@$_%");
-	_TyFinal	PubidChar = PubidCharLessSingleQuote | l('\''); //[13]
-	_TyFinal	PubidLiteral = l(u8'\"') * t(TyGetTriggerPubidLiteralBegin<_TyLexT>()) * ~PubidChar * t(TyGetTriggerPubidLiteralDoubleQuoteEnd<_TyLexT>()) * l(u8'\"') | //[12]
+	_TyFinal PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(u8'a',u8'z') | lr(u8'A',u8'Z') | lr(u8'0',u8'9') | lanyof(u8"-()+,./:=?;!*#@$_%");
+	_TyFinal PubidChar = PubidCharLessSingleQuote | l('\''); //[13]
+	_TyFinal PubidLiteral = l(u8'\"') * t(TyGetTriggerPubidLiteralBegin<_TyLexT>()) * ~PubidChar * t(TyGetTriggerPubidLiteralDoubleQuoteEnd<_TyLexT>()) * l(u8'\"') | //[12]
 														l(u8'\'') * t(TyGetTriggerPubidLiteralBegin<_TyLexT>()) * ~PubidCharLessSingleQuote * t(TyGetTriggerPubidLiteralSingleQuoteEnd<_TyLexT>()) * l(u8'\'');
-	_TyFinal	ExternalID = ls(u8"SYSTEM") * S * SystemLiteral | ls(u8"PUBLIC") * S * PubidLiteral * S * SystemLiteral; //[75]
-  _TyFinal	NDataDecl = S * ls(u8"NDATA") * S * Name; //[76]
+	_TyFinal ExternalID = ls(u8"SYSTEM") * S * SystemLiteral | ls(u8"PUBLIC") * S * PubidLiteral * S * SystemLiteral; //[75]
+  _TyFinal NDataDecl = S * ls(u8"NDATA") * S * Name; //[76]
 
 	// Because this production is sharing triggers with AttValue they cannot appear in the same resultant production (token). That's fine because that isn't possible.
-	_TyFinal	_EVCharRangeNoPercentLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(u8"%&\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
-	_TyFinal	_EVCharRangeNoPercentLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++lnot(u8"%&\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
-	_TyFinal	EntityValue =	l(u8'\"') * ~( _EVCharRangeNoPercentLessDouble | PEReference | Reference )  * l(u8'\"') |	// [9]
+	_TyFinal _EVCharRangeNoPercentLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(u8"%&\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
+	_TyFinal _EVCharRangeNoPercentLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++lnot(u8"%&\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
+	_TyFinal EntityValue =	l(u8'\"') * ~( _EVCharRangeNoPercentLessDouble | PEReference | Reference )  * l(u8'\"') |	// [9]
 													l(u8'\'') * ~( _EVCharRangeNoPercentLessSingle | PEReference | Reference ) * l(u8'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
- 	_TyFinal	EntityDef = EntityValue | ( ExternalID * --NDataDecl ); //[73]
-  _TyFinal	PEDef = EntityValue | ExternalID; //[74]
-	_TyFinal	GEDecl = ls(u8"<!ENTITY") * S * Name * S * EntityDef * --S * l(u8'>'); //[71]
-	_TyFinal	PEDecl = ls(u8"<!ENTITY") * S * l(u8'%') * S * Name * S * PEDef * --S * l(u8'>'); //[72]
-	_TyFinal	EntityDecl = GEDecl | PEDecl; //[70]
+ 	_TyFinal EntityDef = EntityValue | ( ExternalID * --NDataDecl ); //[73]
+  _TyFinal PEDef = EntityValue | ExternalID; //[74]
+	_TyFinal GEDecl = ls(u8"<!ENTITY") * S * Name * S * EntityDef * --S * l(u8'>'); //[71]
+	_TyFinal PEDecl = ls(u8"<!ENTITY") * S * l(u8'%') * S * Name * S * PEDef * --S * l(u8'>'); //[72]
+	_TyFinal EntityDecl = GEDecl | PEDecl; //[70]
 
 // DOCTYPE stuff: For DOCTYPE we will have a couple of different productions - depending on whether the intSubset is present (in between []).
 // This is because the various possible markupdecl productions need to be treated as tokens and the parser will need to switch the start symbol
 // 	to the set of productions for the intSubset as these represent a entirely distinct (for the most part) production set.
 // Note that an external DTD may start with TextDecl production.
-	_TyFinal 	doctype_begin = ls(u8"<!DOCTYPE") * S * Name * --(S * ExternalID) * --S;
-	_TyFinal 	doctypedecl_no_intSubset = doctype_begin * l(u8'>');
-	_TyFinal 	doctypedecl_intSubset_begin = doctype_begin * l(u8'['); // This is returned as a token different from doctypedecl_no_intSubset. This will cause the parser to go into "DTD" mode, recognizing DTD markup, etc.
-	_TyFinal 	doctypedecl_intSubset_end = l(u8']') * --S * l(u8'>');
+	_TyFinal doctype_begin = ls(u8"<!DOCTYPE") * S * Name * --(S * ExternalID) * --S;
+	_TyFinal doctypedecl_no_intSubset = doctype_begin * l(u8'>');
+	_TyFinal doctypedecl_intSubset_begin = doctype_begin * l(u8'['); // This is returned as a token different from doctypedecl_no_intSubset. This will cause the parser to go into "DTD" mode, recognizing DTD markup, etc.
+	_TyFinal doctypedecl_intSubset_end = l(u8']') * --S * l(u8'>');
 
 // [70]   	EntityDecl	   ::=   	GEDecl | PEDecl
 // [71]   	GEDecl	   ::=   	'<!ENTITY' S Name S EntityDef S? '>'
