@@ -77,12 +77,14 @@ target_compile_definitions( xmlpgtest_cursorcopy
 # We may not notice new unittests until CMakeLists.txt is rebuilt - that's ok.
 file(GLOB XMLUNITTESTS LIST_DIRECTORIES true unittests/*.xml )
 foreach( XMLTEST ${XMLUNITTESTS} )
+if ( NOT ${XMLTEST} MATCHES ".+skip" )
 get_filename_component( XMLTEST_NAME ${XMLTEST} NAME_WE )
 message("Unit test: ${XMLTEST_NAME}")    
 gtest_discover_tests(xmlpgtest_cursorcopy
                     EXTRA_ARGS  ${XMLTEST}
                     TEST_SUFFIX .${XMLTEST_NAME}
 )
+endif()
 endforeach()
 endif(1)
 
@@ -105,11 +107,13 @@ target_compile_definitions( xmlpgtest_doccopy
 file(GLOB XMLUNITTESTS LIST_DIRECTORIES true unittests/*.xml )
 foreach( XMLTEST ${XMLUNITTESTS} )
 get_filename_component( XMLTEST_NAME ${XMLTEST} NAME_WE )
+if ( NOT ${XMLTEST} MATCHES ".+skip" )
 message("Unit test: ${XMLTEST_NAME}")    
 gtest_discover_tests(xmlpgtest_doccopy
                     EXTRA_ARGS  ${XMLTEST}
                     TEST_SUFFIX .${XMLTEST_NAME}
 )
+endif()
 endforeach()
 
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )

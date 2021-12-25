@@ -18,11 +18,50 @@ class XmlpTestEnvironment : public testing::Environment
 public:
   typedef std::pair< EFileCharacterEncoding, bool > _TyKeyEncodingBOM;
   typedef map< _TyKeyEncodingBOM, string > _TyMapTestFiles;
-  explicit XmlpTestEnvironment( const char * _pszFileName )
-    : m_strFileNameOrig( _pszFileName )
+  explicit XmlpTestEnvironment( const char * _pszFileName, bool _fCheckForSkipFile = false )
+    : m_strFileNameOrig( _pszFileName ),
+      m_fCheckForSkipFile( _fCheckForSkipFile )
   {
   }
 protected:
+  EFileCharacterEncoding _GetFileEncoding( FileObj const & _rfo, char * _pszFileName, size_t &_rnbyLenghtBOM, bool & _rfEncodingFromBOM )
+  {
+    uint8_t rgbyBOM[vknBytesBOM];
+    int iResult = FileRead( _rfo.HFileGet(), rgbyBOM, vknBytesBOM, &_rnbyLenghtBOM );
+    VerifyThrowSz( !iResult, "Error reading from the file[%s].", vknBytesBOM, _pszFileName );
+    Assert( _rnbyLenghtBOM == vknBytesBOM ); // The smallest valid xml file is 4 bytes... "<t/>".
+    VerifyThrowSz( _rnbyLenghtBOM == vknBytesBOM, "Unable to read [%lu] bytes from the file[%s].", vknBytesBOM, _pszFileName );
+    EFileCharacterEncoding efceEncoding = efceFileCharacterEncodingCount;
+    if ( !iResult && ( _rnbyLenghtBOM == vknBytesBOM ) )
+      efceEncoding = GetCharacterEncodingFromBOM( rgbyBOM, _rnbyLenghtBOM );
+    _rfEncodingFromBOM = ( efceFileCharacterEncodingCount != efceEncoding );
+    if ( !_rfEncodingFromBOM )
+    {
+      // Since we know we are opening XML we can use an easy heuristic to determine the encoding:
+      efceEncoding = DetectEncodingXmlFile( rgbyBOM, vknBytesBOM );
+      Assert( efceFileCharacterEncodingCount != efceEncoding ); // Unless the source isn't XML the above should succeed.
+      VerifyThrowSz( efceFileCharacterEncodingCount != efceEncoding, "Unable to sus encoding _rfor the file[%s].", _pszFileName );
+      _rnbyLenghtBOM = 0;
+    }
+    return efceEncoding;
+  }
+  void _ConvertFile(  const size_t _kstGenerate, path const & _rpathBaseFile, const EFileCharacterEncoding _kefceEncoding, 
+                      const size_t _knbyLenghtBOM, const FileObj & _rkfo, _TyMapTestFiles & _rmapFileNames )
+  {
+    bool fWithBOM = _kstGenerate >= efceFileCharacterEncodingCount;
+    EFileCharacterEncoding efceGenerate = EFileCharacterEncoding( _kstGenerate % efceFileCharacterEncodingCount );
+    // Name the new file with the base of the original XML file:
+    path pathConvertedFile( _rpathBaseFile );
+    pathConvertedFile += "_";
+    pathConvertedFile += PszCharacterEncodingShort( efceGenerate );
+    if ( fWithBOM )
+      pathConvertedFile += "BOM";
+    pathConvertedFile += ".xml";
+    (void)NFileSeekAndThrow( _rkfo.HFileGet(), _knbyLenghtBOM, vkSeekBegin );
+    ConvertFileMapped( _rkfo.HFileGet(), _kefceEncoding, pathConvertedFile.string().c_str(), efceGenerate, fWithBOM );
+    VerifyThrow( _rmapFileNames.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceGenerate, fWithBOM ), pathConvertedFile.string() ) ).second );
+
+  }
   void SetUp() override 
   {
     // 0) Check if the caller used a slash that doesn't match the OS slash and substitute.
@@ -41,26 +80,34 @@ protected:
     path pathBaseFile( "unittests" );
     m_pathStemOrig = pathFileOrig.stem();
     pathBaseFile /= m_pathStemOrig;
+    m_fExpectFailure = ( string::npos != m_strFileNameOrig.find("FAIL") ); // simple method for detecting expected failures.
     FileObj fo( OpenReadOnlyFile( m_strFileNameOrig.c_str() ) );
     VerifyThrowSz( fo.FIsOpen(), "Couldn't open file [%s]", m_strFileNameOrig.c_str() );
-    uint8_t rgbyBOM[vknBytesBOM];
     size_t nbyLenghtBOM;
-    int iResult = FileRead( fo.HFileGet(), rgbyBOM, vknBytesBOM, &nbyLenghtBOM );
-    Assert( !iResult );
-    Assert( nbyLenghtBOM == vknBytesBOM ); // The smallest valid xml file is 4 bytes... "<t/>".
-    VerifyThrowSz( nbyLenghtBOM == vknBytesBOM, "Unable to read [%lu] bytes from the file[%s].", vknBytesBOM, m_strFileNameOrig.c_str() );
-    m_fExpectFailure = ( string::npos != m_strFileNameOrig.find("FAIL") ); // simple method for detecting expected failures.
-    EFileCharacterEncoding efceEncoding = efceFileCharacterEncodingCount;
-    if ( !iResult && ( nbyLenghtBOM == vknBytesBOM ) )
-      efceEncoding = GetCharacterEncodingFromBOM( rgbyBOM, nbyLenghtBOM );
-    bool fEncodingFromBOM = ( efceFileCharacterEncodingCount != efceEncoding );
-    if ( !fEncodingFromBOM )
+    bool fEncodingFromBOM;
+    EFileCharacterEncoding efceEncoding = _GetFileEncoding( fo, m_strFileNameOrig.c_str(), nbyLenghtBOM, fEncodingFromBOM );
+    // Check for skip file if desired:
+    FileObj foSkip;
+    path pathBaseFileSkip( "unittests" );
+    if ( m_fCheckForSkipFile )
     {
-      // Since we know we are opening XML we can use an easy heuristic to determine the encoding:
-      efceEncoding = DetectEncodingXmlFile( rgbyBOM, vknBytesBOM );
-      Assert( efceFileCharacterEncodingCount != efceEncoding ); // Unless the source isn't XML the above should succeed.
-      VerifyThrowSz( efceFileCharacterEncodingCount != efceEncoding, "Unable to sus encoding for the file[%s].", m_strFileNameOrig.c_str() );
-      nbyLenghtBOM = 0;
+      m_pathSkipFile = pathFileOrig;
+      string strNameSkipFile = pathFileOrig.stem();
+      strNameSkipFile += "_skip.xml";
+      m_pathSkipFile.replace_filename( strNameSkipFile );
+      m_fHasSkipFile = exists( m_pathSkipFile );
+      if ( m_fHasSkipFile )
+      {
+        m_pathStemOrigSkip = m_pathSkipFile.stem();
+        pathBaseFileSkip /= m_pathStemOrigSkip;
+        foSkip.SetHFile( OpenReadOnlyFile( m_pathSkipFile.c_str() ) );
+        VerifyThrowSz( foSkip.FIsOpen(), "Couldn't open skip file [%s]", m_pathSkipFile.c_str() );
+        size_t nbyLenghtBOMSkip;
+        bool fEncodingFromBOMSkip;
+        EFileCharacterEncoding efceEncodingSkip = _GetFileEncoding( fo, m_pathSkipFile.c_str(), nbyLenghtBOMSkip, fEncodingFromBOMSkip );
+        VerifyThrowSz( ( efceEncodingSkip == efceEncoding ) && ( nbyLenghtBOM == nbyLenghtBOMSkip ) && ( fEncodingFromBOM == fEncodingFromBOMSkip ),
+          "Encoding and BOM characteristics of skip file must match original file [%s].", m_pathSkipFile.c_str() );
+      }
     }
     
     size_t grfNeedFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
@@ -70,25 +117,24 @@ protected:
     {
       // This isn't as efficient as it could be but it feng shuis...
       size_t stGenerate = _bv_get_clear_first_set( grfNeedFiles );
-      bool fWithBOM = stGenerate >= efceFileCharacterEncodingCount;
-      EFileCharacterEncoding efceGenerate = EFileCharacterEncoding( stGenerate % efceFileCharacterEncodingCount );
-      // Name the new file with the base of the original XML file:
-      path pathConvertedFile( pathBaseFile );
-      pathConvertedFile += "_";
-      pathConvertedFile += PszCharacterEncodingShort( efceGenerate );
-      if ( fWithBOM )
-        pathConvertedFile += "BOM";
-      pathConvertedFile += ".xml";
-      (void)NFileSeekAndThrow( fo.HFileGet(), nbyLenghtBOM, vkSeekBegin );
-      ConvertFileMapped( fo.HFileGet(), efceEncoding, pathConvertedFile.string().c_str(), efceGenerate, fWithBOM );
-      VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceGenerate, fWithBOM ), pathConvertedFile.string() ) ).second );
+      _ConvertFile( stGenerate, pathBaseFile, efceEncoding, nbyLenghtBOM, fo, m_mapFileNamesTestDir );
+      if ( m_fHasSkipFile )
+        _ConvertFile( stGenerate, pathBaseFileSkip, efceEncoding, nbyLenghtBOM, foSkip, m_mapFileNamesTestDirSkip );
     }
-    // Now copy the original to the output directory - don't modify the name so we know it's the original.
-    path pathConvertedFile( pathBaseFile );
-    pathConvertedFile += ".xml";
-    ConvertFileMapped( fo.HFileGet(), efceEncoding, pathConvertedFile.string().c_str(), efceEncoding, fEncodingFromBOM );
-    VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceEncoding, fEncodingFromBOM ), pathConvertedFile.string() ) ).second );
-
+    { //B - Now copy the original to the output directory - don't modify the name so we know it's the original.
+      path pathConvertedFile( pathBaseFile );
+      pathConvertedFile += ".xml";
+      ConvertFileMapped( fo.HFileGet(), efceEncoding, pathConvertedFile.string().c_str(), efceEncoding, fEncodingFromBOM );
+      VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceEncoding, fEncodingFromBOM ), pathConvertedFile.string() ) ).second );
+    }
+    if ( m_fHasSkipFile )
+    {
+      // copy the original skip file:
+      path pathConvertedFile( pathBaseFileSkip );
+      pathConvertedFile += ".xml";
+      ConvertFileMapped( foSkip.HFileGet(), efceEncoding, pathConvertedFile.string().c_str(), efceEncoding, fEncodingFromBOM );
+      VerifyThrow( m_mapFileNamesTestDirSkip.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceEncoding, fEncodingFromBOM ), pathConvertedFile.string() ) ).second );
+    }
     // Create a directory for the base file - sans extension - this is where the output files for the given unit test will go.
     std::error_code ec;
     (void)create_directory( pathBaseFile, ec );
@@ -171,11 +217,14 @@ public:
   }
    
   string m_strFileNameOrig;
+  bool m_fCheckForSkipFile; // For cursor copying we will unit test skipping subtags, etc and then we compare against the skipped file.
+  bool m_fHasSkipFile{false}; // Did we find a skip file?
   filesystem::path m_pathStemOrig;
   size_t m_grfFileOrig{0}; // The bit for the original file so we can match the name in the output.
   filesystem::path m_pathBaseFile;
   bool m_fExpectFailure{false}; // If this is true then we expect the test to fail.
-  _TyMapTestFiles m_mapFileNamesTestDir; // The resultant files that were written to the test directory in the output.
+  _TyMapTestFiles m_mapFileNamesTestDir; // The resultant files that were written to the unittest directory in the output.
+  _TyMapTestFiles m_mapFileNamesTestDirSkip; // The resultant skip files that were written to the unittest directory in the output.
 };
 
 inline void MapFileForMemoryTest( const char * _pszFileName, FileMappingObj & _rfmo, size_t & _nbyBytesFile )
