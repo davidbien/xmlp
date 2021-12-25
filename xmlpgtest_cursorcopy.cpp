@@ -185,8 +185,12 @@ protected:
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
       //  for encoding of course. This is the nature of the current unit test.
       xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
-      size_t nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc );
-      Assert( 1 == nTagsWritten ); // since we started in the prologue.
+      size_t nTagsWritten;
+      if ( m_fHasSkipFile )
+        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc ); // Use this method when we might have "skip tags" for unit testing.
+      else
+        nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc ); // Use this method to make sure it doesn't have bugs when no "skip tags" are present.
+      Assert( 1 == nTagsWritten ); // since we started in the prologue. A valid XML document should have one element.
       VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
     }//EB
     // Now compare the two files:
@@ -355,8 +359,12 @@ protected:
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
       //  for encoding of course. This is the nature of the current unit test.
       xwWriter.OpenMemFile( xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
-      size_t nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc );
-      Assert( 1 == nTagsWritten ); // since we started in the prologue.
+      size_t nTagsWritten;
+      if ( m_fHasSkipFile )
+        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc ); // Use this method when we might have "skip tags" for unit testing.
+      else
+        nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc ); // Use this method to make sure it doesn't have bugs when no "skip tags" are present.
+      Assert( 1 == nTagsWritten ); // since we started in the prologue. A valid XML document should have one element.
       VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
 
       // Now open the file and write the memstream to the file:
@@ -677,8 +685,12 @@ protected:
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
       //  for encoding of course. This is the nature of the current unit test.
       xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
-      size_t nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc );
-      Assert( 1 == nTagsWritten ); // since we started in the prologue.
+      size_t nTagsWritten;
+      if ( m_fHasSkipFile )
+        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc ); // Use this method when we might have "skip tags" for unit testing.
+      else
+        nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc ); // Use this method to make sure it doesn't have bugs when no "skip tags" are present.
+      Assert( 1 == nTagsWritten ); // since we started in the prologue. A valid XML document should have one element.
       VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
     }//EB
     // Now compare the two files:
@@ -849,8 +861,12 @@ protected:
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
       //  for encoding of course. This is the nature of the current unit test.
       xwWriter.OpenMemFile( xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
-      size_t nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc );
-      Assert( 1 == nTagsWritten ); // since we started in the prologue.
+      size_t nTagsWritten;
+      if ( m_fHasSkipFile )
+        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc ); // Use this method when we might have "skip tags" for unit testing.
+      else
+        nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc ); // Use this method to make sure it doesn't have bugs when no "skip tags" are present.
+      Assert( 1 == nTagsWritten ); // since we started in the prologue. A valid XML document should have one element.
       VerifyThrowSz( !m_fExpectFailure, "We expected to fail but we succeeded. No bueno." );
 
       // Now open the file and write the memstream to the file:

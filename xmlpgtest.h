@@ -172,9 +172,10 @@ public:
     size_t stGenerate = _bv_get_clear_first_set( _rgrfBitOutput );
     bool fWithBOM = stGenerate >= efceFileCharacterEncodingCount;
     EFileCharacterEncoding efceEncoding = EFileCharacterEncoding( stGenerate % efceFileCharacterEncodingCount );
-    _TyMapTestFiles::const_iterator citFile = m_mapFileNamesTestDir.find( _TyKeyEncodingBOM(efceEncoding, fWithBOM ) );
+    _TyMapTestFiles const & rmapFileNamesTestDir = m_fHasSkipFile ? m_mapFileNamesTestDirSkip : m_mapFileNamesTestDir;
+    _TyMapTestFiles::const_iterator citFile = rmapFileNamesTestDir.find( _TyKeyEncodingBOM(efceEncoding, fWithBOM ) );
     _rpvtGoldenFile = &*citFile;
-    VerifyThrow( m_mapFileNamesTestDir.end() != citFile ); // unexpected.
+    VerifyThrow( rmapFileNamesTestDir.end() != citFile ); // unexpected.
     pathOutputFile /= m_pathStemOrig;
     if ( ( 1ull << stGenerate ) != m_grfFileOrig )
     {
