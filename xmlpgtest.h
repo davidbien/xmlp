@@ -207,6 +207,9 @@ public:
       VerifyThrowSz( *pbyOutputCur == *pbyGoldenCur, "Mismatch at byte number [%lu] outputfile[%s] goldenfile[%s].", ( pbyOutputCur - fmoOutput.Pby() ), 
          _rpathOutputFile.string().c_str(), _pvtGoldenFile->second.c_str() );
     }
+    VerifyThrowSz( nbyOutput == nbyGolden, "File sizes don't match outputfile[%s][%lu] goldenfile[%s][%lu].",
+        _rpathOutputFile.string().c_str(), nbyOutput, _pvtGoldenFile->second.c_str(), nbyGolden );
+
   }
   FileMappingObj _FmoOpen( filesystem::path const & _rpathFile, size_t & _rnbySize )
   {
