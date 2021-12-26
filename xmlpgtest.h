@@ -24,7 +24,7 @@ public:
   {
   }
 protected:
-  EFileCharacterEncoding _GetFileEncoding( FileObj const & _rfo, char * _pszFileName, size_t &_rnbyLenghtBOM, bool & _rfEncodingFromBOM )
+  EFileCharacterEncoding _GetFileEncoding( FileObj const & _rfo, const char * _pszFileName, size_t &_rnbyLenghtBOM, bool & _rfEncodingFromBOM )
   {
     uint8_t rgbyBOM[vknBytesBOM];
     int iResult = FileRead( _rfo.HFileGet(), rgbyBOM, vknBytesBOM, &_rnbyLenghtBOM );
@@ -45,9 +45,10 @@ protected:
     }
     return efceEncoding;
   }
-  void _ConvertFile(  const size_t _kstGenerate, path const & _rpathBaseFile, const EFileCharacterEncoding _kefceEncoding, 
+  void _ConvertFile(  const size_t _kstGenerate, filesystem::path const& _rpathBaseFile, const EFileCharacterEncoding _kefceEncoding,
                       const size_t _knbyLenghtBOM, const FileObj & _rkfo, _TyMapTestFiles & _rmapFileNames )
   {
+    using namespace filesystem;
     bool fWithBOM = _kstGenerate >= efceFileCharacterEncodingCount;
     EFileCharacterEncoding efceGenerate = EFileCharacterEncoding( _kstGenerate % efceFileCharacterEncodingCount );
     // Name the new file with the base of the original XML file:
@@ -91,22 +92,21 @@ protected:
     path pathBaseFileSkip( "unittests" );
     if ( m_fCheckForSkipFile )
     {
-      m_pathSkipFile = pathFileOrig;
-      string strNameSkipFile = pathFileOrig.stem();
+      path pathSkipFile = pathFileOrig;
+      string strNameSkipFile = pathFileOrig.stem().string().c_str();
       strNameSkipFile += "_skip.xml";
-      m_pathSkipFile.replace_filename( strNameSkipFile );
-      m_fHasSkipFile = exists( m_pathSkipFile );
+      pathSkipFile.replace_filename( strNameSkipFile );
+      m_fHasSkipFile = exists( pathSkipFile );
       if ( m_fHasSkipFile )
       {
-        m_pathStemOrigSkip = m_pathSkipFile.stem();
-        pathBaseFileSkip /= m_pathStemOrigSkip;
-        foSkip.SetHFile( OpenReadOnlyFile( m_pathSkipFile.c_str() ) );
-        VerifyThrowSz( foSkip.FIsOpen(), "Couldn't open skip file [%s]", m_pathSkipFile.c_str() );
+        pathBaseFileSkip /= pathSkipFile.stem();
+        foSkip.SetHFile( OpenReadOnlyFile( pathSkipFile.string().c_str() ) );
+        VerifyThrowSz( foSkip.FIsOpen(), "Couldn't open skip file [%s]", pathSkipFile.c_str() );
         size_t nbyLenghtBOMSkip;
         bool fEncodingFromBOMSkip;
-        EFileCharacterEncoding efceEncodingSkip = _GetFileEncoding( fo, m_pathSkipFile.c_str(), nbyLenghtBOMSkip, fEncodingFromBOMSkip );
+        EFileCharacterEncoding efceEncodingSkip = _GetFileEncoding( foSkip, pathSkipFile.string().c_str(), nbyLenghtBOMSkip, fEncodingFromBOMSkip );
         VerifyThrowSz( ( efceEncodingSkip == efceEncoding ) && ( nbyLenghtBOM == nbyLenghtBOMSkip ) && ( fEncodingFromBOM == fEncodingFromBOMSkip ),
-          "Encoding and BOM characteristics of skip file must match original file [%s].", m_pathSkipFile.c_str() );
+          "Encoding and BOM characteristics of skip file must match original file [%s].", pathSkipFile.c_str() );
       }
     }
     

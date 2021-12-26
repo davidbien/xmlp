@@ -1,3 +1,11 @@
-﻿<tag1 foo:zoo="12323&#x27;" xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File">
-  <tag2/><tag3></tag3><tag4/>
-</tag1>
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- comment 1 -->
+<?ProcessingInstruction Do this awesome thing right here. Please! ?>
+<?ProcessingInstruction2?>
+<attributePath xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File" xmlns="http://jazz.net/xmlns/alm/qm/v0.1/catalog/v0.1">
+<skip xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File" xmlns="">
+<tag3 foo:zoo="12323&#x27;"/>
+</skip></attributePath>
+<!-- comment 2 -->
+<?ProcessingInstruction3 I would like this to happen here. ?>
+<?ProcessingInstruction4?>

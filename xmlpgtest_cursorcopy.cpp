@@ -186,8 +186,9 @@ protected:
       //  for encoding of course. This is the nature of the current unit test.
       xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
       size_t nTagsWritten;
-      if ( m_fHasSkipFile )
-        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc ); // Use this method when we might have "skip tags" for unit testing.
+      bool fSkippedSomething;
+      if ( vpxteXmlpTestEnvironment->m_fHasSkipFile )
+        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc, fSkippedSomething ); // Use this method when we might have "skip tags" for unit testing.
       else
         nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc ); // Use this method to make sure it doesn't have bugs when no "skip tags" are present.
       Assert( 1 == nTagsWritten ); // since we started in the prologue. A valid XML document should have one element.
@@ -360,8 +361,9 @@ protected:
       //  for encoding of course. This is the nature of the current unit test.
       xwWriter.OpenMemFile( xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
       size_t nTagsWritten;
-      if ( m_fHasSkipFile )
-        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc ); // Use this method when we might have "skip tags" for unit testing.
+      bool fSkippedSomething;
+      if ( vpxteXmlpTestEnvironment->m_fHasSkipFile )
+        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc, fSkippedSomething ); // Use this method when we might have "skip tags" for unit testing.
       else
         nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc ); // Use this method to make sure it doesn't have bugs when no "skip tags" are present.
       Assert( 1 == nTagsWritten ); // since we started in the prologue. A valid XML document should have one element.
@@ -686,8 +688,9 @@ protected:
       //  for encoding of course. This is the nature of the current unit test.
       xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
       size_t nTagsWritten;
-      if ( m_fHasSkipFile )
-        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc ); // Use this method when we might have "skip tags" for unit testing.
+      bool fSkippedSomething;
+      if ( vpxteXmlpTestEnvironment->m_fHasSkipFile )
+        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc, fSkippedSomething ); // Use this method when we might have "skip tags" for unit testing.
       else
         nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc ); // Use this method to make sure it doesn't have bugs when no "skip tags" are present.
       Assert( 1 == nTagsWritten ); // since we started in the prologue. A valid XML document should have one element.
@@ -862,8 +865,9 @@ protected:
       //  for encoding of course. This is the nature of the current unit test.
       xwWriter.OpenMemFile( xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
       size_t nTagsWritten;
-      if ( m_fHasSkipFile )
-        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc ); // Use this method when we might have "skip tags" for unit testing.
+      bool fSkippedSomething;
+      if ( vpxteXmlpTestEnvironment->m_fHasSkipFile )
+        nTagsWritten = xwWriter.NWriteFromReadCursorUnitTest( _rxrc, fSkippedSomething ); // Use this method when we might have "skip tags" for unit testing.
       else
         nTagsWritten = xwWriter.NWriteFromReadCursor( _rxrc ); // Use this method to make sure it doesn't have bugs when no "skip tags" are present.
       Assert( 1 == nTagsWritten ); // since we started in the prologue. A valid XML document should have one element.
@@ -1001,7 +1005,7 @@ int _TryMain( int argc, char **argv )
     // We should be running in the executable output directory and we should have a subdirectory created by the build already called "unittests".
     VerifyThrowSz( FDirectoryExists( "unittests" ), "We expect to find a directory called 'unittests' in the build directory." );
     // We expect a fully qualified path name for our file - but the test environment ends up verifying that.
-    (void)testing::AddGlobalTestEnvironment( vpxteXmlpTestEnvironment = new XmlpTestEnvironment( argv[1] ) );
+    (void)testing::AddGlobalTestEnvironment( vpxteXmlpTestEnvironment = new XmlpTestEnvironment( argv[1], true ) );
   }
   return RUN_ALL_TESTS();
 }
