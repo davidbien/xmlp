@@ -1,0 +1,6 @@
+﻿<tag1 foo:zoo="12323&#x27;" xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File">
+  <tag2/><tag3></tag3><tag4></tag4></tag1>
+<!-- comment 2 -->
+<?ProcessingInstruction3 I would like this to happen here. ?>
+<?ProcessingInstruction4?>
+
