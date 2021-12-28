@@ -1,2 +1,3 @@
 ﻿<tag1 foo:zoo="12323&#x27;" xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File">
-  <tag2/><tag3></tag3><tag4/></tag1>
+  <tag2/><tag3></tag3><tag4/>
+</tag1>

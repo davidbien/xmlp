@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- comment 1 -->
+<?ProcessingInstruction Do this awesome thing right here. Please! ?>
+<?ProcessingInstruction2?>
+<attributePath xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File" xmlns="http://jazz.net/xmlns/alm/qm/v0.1/catalog/v0.1">
+</attributePath>
+<!-- comment 2 -->
+<?ProcessingInstruction3 I would like this to happen here. ?>
+<?ProcessingInstruction4?>
