@@ -2,22 +2,22 @@
 <!-- comment 1 -->
 <?ProcessingInstruction Do this awesome thing right here. Please! ?>
 <?ProcessingInstruction2?>
-<tag0>
-<tag1>
+<tag0 xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File">
+<foo:tag1>
 
-</tag1>
-<tag1>
+</foo:tag1>
+<foo:tag1>
 <movedownup>
-<tag3/>
-<tag3/>
+<foo:tag3/>
+<foo:tag3/>
 </movedownup>
 <moveleafup>
-<tag3>
-	<tag4></tag4>
-</tag3>
+<foo:tag3>
+	<foo:tag4><tag5/></foo:tag4>
+</foo:tag3>
 <tag3/>
-<tag3></tag3>
-</moveleafup></tag1>
+<foo:tag3></foo:tag3>
+</moveleafup></foo:tag1>
 </tag0>
 <!-- comment 2 -->
 <?ProcessingInstruction3 I would like this to happen here. ?>

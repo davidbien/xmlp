@@ -204,7 +204,8 @@ public:
     for ( ; ( pbyOutputEnd != pbyOutputCur ) && ( pbyGoldenEnd != pbyGoldenCur ); ++pbyOutputCur, ++pbyGoldenCur )
     {
       Assert( *pbyOutputCur == *pbyGoldenCur );
-      VerifyThrowSz( *pbyOutputCur == *pbyGoldenCur, "Mismatch at byte number [%lu] outputfile[%s] goldenfile[%s].", ( pbyOutputCur - fmoOutput.Pby() ), 
+      size_t nbyOffsetDiff = ( pbyOutputCur - fmoOutput.Pby() );
+      VerifyThrowSz( *pbyOutputCur == *pbyGoldenCur, "Mismatch at byte number [%lu] outputfile[%s] goldenfile[%s].", nbyOffsetDiff, 
          _rpathOutputFile.string().c_str(), _pvtGoldenFile->second.c_str() );
     }
     VerifyThrowSz( nbyOutput == nbyGolden, "File sizes don't match outputfile[%s][%lu] goldenfile[%s][%lu].",
