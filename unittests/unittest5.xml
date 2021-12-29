@@ -2,16 +2,32 @@
 <!-- comment 1 -->
 <?ProcessingInstruction Do this awesome thing right here. Please! ?>
 <?ProcessingInstruction2?>
-<attributePath xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File" xmlns="http://jazz.net/xmlns/alm/qm/v0.1/catalog/v0.1">
-<skipdownup xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File" xmlns="">
-<tag3 goo:zoo="12323&#x27;" xmlns:goo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File"/>
-<tag3 goo:zoo="12323&#x27;" xmlns:goo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File"/>
+<tag0>
+<tag1>
+<skipdownup>
+<tag3/>
+<tag3/>
 </skipdownup>
-<skipdownup xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File" xmlns="">
-<tag3 goo:zoo="12323&#x27;" xmlns:goo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File"></tag3>
-<tag3 goo:zoo="12323&#x27;" xmlns:goo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File"/>
-<tag3 goo:zoo="12323&#x27;" xmlns:goo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File"></tag3>
-</skipdownup></attributePath>
+<skipleafup>
+<tag3>
+	<tag4></tag4>
+</tag3>
+<tag3/>
+<tag3></tag3>
+</skipleafup></tag1>
+<tag1>
+<movedownup>
+<tag3/>
+<tag3/>
+</movedownup>
+<moveleafup>
+<tag3>
+	<tag4></tag4>
+</tag3>
+<tag3/>
+<tag3></tag3>
+</moveleafup></tag1>
+</tag0>
 <!-- comment 2 -->
 <?ProcessingInstruction3 I would like this to happen here. ?>
 <?ProcessingInstruction4?>
