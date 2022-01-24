@@ -284,7 +284,7 @@ protected:
   void _TryTestParserMemory()
   {
     FileMappingObj fmo;
-    size_t nbySizeBytes;
+    uint64_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
@@ -387,7 +387,7 @@ protected:
   void _TryTestParserMemoryTransportVar()
   {
     FileMappingObj fmo;
-    size_t nbySizeBytes;
+    uint64_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     typedef xml_document< _TyXmlTraits > _TyXmlDoc;
@@ -774,7 +774,7 @@ protected:
   void _TryTestParserMemory()
   {
     FileMappingObj fmo;
-    size_t nbySizeBytes;
+    uint64_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     _TyXmlParser xmlParser;
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
@@ -880,7 +880,7 @@ protected:
   void _TryTestParserMemoryTransportVar()
   {
     FileMappingObj fmo;
-    size_t nbySizeBytes;
+    uint64_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     _TyXmlParser xmlParser;
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;

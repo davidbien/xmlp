@@ -24,13 +24,13 @@ public:
   {
   }
 protected:
-  EFileCharacterEncoding _GetFileEncoding( FileObj const & _rfo, const char * _pszFileName, size_t &_rnbyLenghtBOM, bool & _rfEncodingFromBOM )
+  EFileCharacterEncoding _GetFileEncoding( FileObj const & _rfo, const char * _pszFileName, uint64_t &_rnbyLenghtBOM, bool & _rfEncodingFromBOM )
   {
     uint8_t rgbyBOM[vknBytesBOM];
     int iResult = FileRead( _rfo.HFileGet(), rgbyBOM, vknBytesBOM, &_rnbyLenghtBOM );
     VerifyThrowSz( !iResult, "Error reading from the file[%s].", vknBytesBOM, _pszFileName );
     Assert( _rnbyLenghtBOM == vknBytesBOM ); // The smallest valid xml file is 4 bytes... "<t/>".
-    VerifyThrowSz( _rnbyLenghtBOM == vknBytesBOM, "Unable to read [%lu] bytes from the file[%s].", vknBytesBOM, _pszFileName );
+    VerifyThrowSz( _rnbyLenghtBOM == vknBytesBOM, "Unable to read [%llu] bytes from the file[%s].", vknBytesBOM, _pszFileName );
     EFileCharacterEncoding efceEncoding = efceFileCharacterEncodingCount;
     if ( !iResult && ( _rnbyLenghtBOM == vknBytesBOM ) )
       efceEncoding = GetCharacterEncodingFromBOM( rgbyBOM, _rnbyLenghtBOM );
@@ -46,7 +46,7 @@ protected:
     return efceEncoding;
   }
   void _ConvertFile(  const size_t _kstGenerate, filesystem::path const& _rpathBaseFile, const EFileCharacterEncoding _kefceEncoding,
-                      const size_t _knbyLenghtBOM, const FileObj & _rkfo, _TyMapTestFiles & _rmapFileNames )
+                      const uint64_t _knbyLenghtBOM, const FileObj & _rkfo, _TyMapTestFiles & _rmapFileNames )
   {
     using namespace filesystem;
     bool fWithBOM = _kstGenerate >= efceFileCharacterEncodingCount;
@@ -84,7 +84,7 @@ protected:
     m_fExpectFailure = ( string::npos != m_strFileNameOrig.find("FAIL") ); // simple method for detecting expected failures.
     FileObj fo( OpenReadOnlyFile( m_strFileNameOrig.c_str() ) );
     VerifyThrowSz( fo.FIsOpen(), "Couldn't open file [%s]", m_strFileNameOrig.c_str() );
-    size_t nbyLenghtBOM;
+    uint64_t nbyLenghtBOM;
     bool fEncodingFromBOM;
     EFileCharacterEncoding efceEncoding = _GetFileEncoding( fo, m_strFileNameOrig.c_str(), nbyLenghtBOM, fEncodingFromBOM );
     // Check for skip file if desired:
@@ -102,7 +102,7 @@ protected:
         pathBaseFileSkip /= pathSkipFile.stem();
         foSkip.SetHFile( OpenReadOnlyFile( pathSkipFile.string().c_str() ) );
         VerifyThrowSz( foSkip.FIsOpen(), "Couldn't open skip file [%s]", pathSkipFile.c_str() );
-        size_t nbyLenghtBOMSkip;
+        uint64_t nbyLenghtBOMSkip;
         bool fEncodingFromBOMSkip;
         EFileCharacterEncoding efceEncodingSkip = _GetFileEncoding( foSkip, pathSkipFile.string().c_str(), nbyLenghtBOMSkip, fEncodingFromBOMSkip );
         VerifyThrowSz( ( efceEncodingSkip == efceEncoding ) && ( nbyLenghtBOM == nbyLenghtBOMSkip ) && ( fEncodingFromBOM == fEncodingFromBOMSkip ),
@@ -192,7 +192,7 @@ public:
     // Map both files and compare the memory - should match byte for byte. If unit tests have extra whitespace in markup (i.e. between attribute declarations)
     //  then the files may not match. It's important to structure the unit tests so that they don't have extra markup whitespace. All non-markup whitespace
     //  should be duplicated correctly - i.e CHARDATA in between tags and other elements.
-    size_t nbyOutput, nbyGolden;
+    uint64_t nbyOutput, nbyGolden;
     FileMappingObj fmoOutput( _FmoOpen( _rpathOutputFile, nbyOutput ) );
     FileMappingObj fmoGolden( _FmoOpen( _pvtGoldenFile->second, nbyGolden ) );
     // Move through even if the files don't match in size to find the first byte where they don't match for diag purposes.
@@ -205,14 +205,14 @@ public:
     {
       Assert( *pbyOutputCur == *pbyGoldenCur );
       size_t nbyOffsetDiff = ( pbyOutputCur - fmoOutput.Pby() );
-      VerifyThrowSz( *pbyOutputCur == *pbyGoldenCur, "Mismatch at byte number [%lu] outputfile[%s] goldenfile[%s].", nbyOffsetDiff, 
+      VerifyThrowSz( *pbyOutputCur == *pbyGoldenCur, "Mismatch at byte number [%zu] outputfile[%s] goldenfile[%s].", nbyOffsetDiff, 
          _rpathOutputFile.string().c_str(), _pvtGoldenFile->second.c_str() );
     }
-    VerifyThrowSz( nbyOutput == nbyGolden, "File sizes don't match outputfile[%s][%lu] goldenfile[%s][%lu].",
+    VerifyThrowSz( nbyOutput == nbyGolden, "File sizes don't match outputfile[%s][%zu] goldenfile[%s][%zu].",
         _rpathOutputFile.string().c_str(), nbyOutput, _pvtGoldenFile->second.c_str(), nbyGolden );
 
   }
-  FileMappingObj _FmoOpen( filesystem::path const & _rpathFile, size_t & _rnbySize )
+  FileMappingObj _FmoOpen( filesystem::path const & _rpathFile, uint64_t & _rnbySize )
   {
     FileObj fo( OpenReadOnlyFile( _rpathFile.string().c_str() ) );
     VerifyThrowSz( fo.FIsOpen(), "Unable to open file [%s].", _rpathFile.string().c_str() );
@@ -232,7 +232,7 @@ public:
   _TyMapTestFiles m_mapFileNamesTestDirSkip; // The resultant skip files that were written to the unittest directory in the output.
 };
 
-inline void MapFileForMemoryTest( const char * _pszFileName, FileMappingObj & _rfmo, size_t & _nbyBytesFile )
+inline void MapFileForMemoryTest( const char * _pszFileName, FileMappingObj & _rfmo, uint64_t & _nbyBytesFile )
 {
   FileObj fo( OpenReadOnlyFile( _pszFileName ) );
   VerifyThrowSz( fo.FIsOpen(), "Couldn't open file [%s]", _pszFileName );

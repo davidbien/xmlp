@@ -285,7 +285,7 @@ protected:
   void _TryTestParserMemory()
   {
     FileMappingObj fmo;
-    size_t nbySizeBytes;
+    uint64_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
@@ -395,7 +395,7 @@ protected:
   void _TryTestParserMemoryTransportVar()
   {
     FileMappingObj fmo;
-    size_t nbySizeBytes;
+    uint64_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     typedef typename _TyXmlParser::_TyReadCursor _TyReadCursor;
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
@@ -787,7 +787,7 @@ protected:
   void _TryTestParserMemory()
   {
     FileMappingObj fmo;
-    size_t nbySizeBytes;
+    uint64_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
@@ -899,7 +899,7 @@ protected:
   void _TryTestParserMemoryTransportVar()
   {
     FileMappingObj fmo;
-    size_t nbySizeBytes;
+    uint64_t nbySizeBytes;
     MapFileForMemoryTest( m_citTestFile->second.c_str(), fmo, nbySizeBytes );
     typedef typename _TyXmlParser::_TyReadCursorVar _TyReadCursorVar;
     size_t grfOutputFiles = ( 1 << ( 2 * efceFileCharacterEncodingCount ) ) - 1;
