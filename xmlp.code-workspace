@@ -73,7 +73,13 @@
 			"xstddef": "cpp",
 			"xtr1common": "cpp",
 			"xtree": "cpp",
-			"xutility": "cpp"
+			"xutility": "cpp",
+			"array": "cpp",
+			"bit": "cpp",
+			"charconv": "cpp",
+			"clocale": "cpp",
+			"format": "cpp",
+			"stop_token": "cpp"
 		}
 	}
 }
