@@ -1,0 +1,34 @@
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "xmlpgtest_doccopy.exe",
+      "name": "xmlpgtest_doccopy.exe",
+      "args": [
+        "C:/dv/xmlp/unittests/unittest1.xml"
+      ]
+    },
+    {
+      "type": "cppgdb",
+      "name": "xmlpgtest_cursorcopy",
+      "project": "CMakeLists.txt",
+      "projectTarget": "xmlpgtest_cursorcopy",
+      "comment": "Learn how to configure WSL debugging. For more info, see http://aka.ms/vslinuxdebug",
+      "debuggerConfiguration": "gdb",
+      "args": [],
+      "env": {}
+    },
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "xmlpgtest_cursorcopy.exe",
+      "name": "xmlpgtest_cursorcopy.exe",
+      "args": [
+        "C:/dv/xmlp/unittests/unittest5.xml"
+      ]
+    }
+  ]
+}
