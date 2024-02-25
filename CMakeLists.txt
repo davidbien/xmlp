@@ -16,10 +16,10 @@ enable_testing()
 
 include ( bienutil/bienutil.cmake )
 
-set(GTEST_VERSION 1.12.0 CACHE STRING "Google test version")
+set(GTEST_VERSION 1.14.0 CACHE STRING "Google test version")
 FetchContent_Declare(googletest
 GIT_REPOSITORY https://github.com/google/googletest.git
-GIT_TAG release-${GTEST_VERSION})
+GIT_TAG v${GTEST_VERSION})
 FetchContent_MakeAvailable(googletest)
 include_directories("${gtest_SOURCE_DIR}/include")
 
