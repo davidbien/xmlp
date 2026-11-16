@@ -121,7 +121,9 @@ bool FTryGetToken( t_TyAnalyzer & _rA, t_PtrReturned & _rptrReturned )
 	__LEXOBJ_USING_NAMESPACE
 	try
 	{
-		return _rA.FGetToken( _rptrReturned );
+		// The generated analyzer contains several DFAs and so has no default start state - we must pass one.
+		typedef typename t_TyAnalyzer::_TyStateProto _TyStateProto;
+		return _rA.FGetToken( _rptrReturned, nullptr, nullptr, (const _TyStateProto *)&ns_xmlplex::startUTF32All< typename t_TyAnalyzer::_TyTraits > );
 	}
 	catch( const _l_no_token_found_exception & rexc )
 	{

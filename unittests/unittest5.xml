@@ -6,8 +6,7 @@
 <foo:tag1>
 <skipdownup>
 <tag3/>
-<!-- Note that namespace prefixes are not validated in skipped tags to speed processing when skipping -->
-<zoo:tag3/>
+<tag3/>
 </skipdownup>
 <skipleafup>
 <tag3>
