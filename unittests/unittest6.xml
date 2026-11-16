@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- Move down into an empty element tag that is the last child element of its parent, move back up, then go to the next tag. -->
+<tag0 xmlns:foo="http://schemas.microsoft.com/AspNet/AdRotator-Schedule-File">
+<tag1>before0 <skipdownup><tag3/></skipdownup> after0<tag2/></tag1>
+<tag1>before1 <skipdownup>
+<tag3/>
+</skipdownup> after1<tag2/></tag1>
+<tag1>before2 <skipdownup><tag3/>text after</skipdownup> after2<tag2/></tag1>
+<tag1>before3 <skipdownup><tag3/><!-- comment after --><?pi after?></skipdownup> after3<tag2/></tag1>
+<tag1>before4 <skipleafup><tag3><foo:tag4/></tag3></skipleafup> after4<tag2/></tag1>
+<tag1>before5 <skipleafup><tag3><foo:tag4><tag5/></foo:tag4> text </tag3><tag3/></skipleafup> after5<tag2/></tag1>
+<foo:tag1>
+<movedownup><foo:tag3/></movedownup>
+<moveleafup><tag3><foo:tag4><tag5/></foo:tag4></tag3></moveleafup>
+<moveleafup>
+<tag3>
+	<foo:tag4/> text after
+</tag3>
+</moveleafup></foo:tag1>
+</tag0>
+<!-- comment 2 -->
