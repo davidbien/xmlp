@@ -130,3 +130,6 @@ target_compile_definitions( xmltestsame
   # PUBLIC TRACESENABLED=0
   # PUBLIC ASSERTSENABLED=0
 )
+
+# dgraph builds its own unit tests - they are run by ctest along with ours.
+add_subdirectory(dgraph)

@@ -6,13 +6,6 @@
 // TODO: precompiled headers? probably wouldn't gain too much but it is easy.
 #include "xmlpgen.h"
 
-#ifdef __DGRAPH_COUNT_EL_ALLOC_LIFETIME
-int gs_iNodesAllocated = 0;
-int gs_iLinksAllocated = 0;
-int gs_iNodesConstructed = 0;
-int gs_iLinksConstructed = 0;
-#endif //__DGRAPH_COUNT_EL_ALLOC_LIFETIME
-
 __REGEXP_USING_NAMESPACE
 __XMLP_USING_NAMESPACE
 
