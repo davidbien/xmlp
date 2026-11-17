@@ -133,3 +133,6 @@ target_compile_definitions( xmltestsame
 
 # dgraph builds its own unit tests - they are run by ctest along with ours.
 add_subdirectory(dgraph)
+
+# lexang builds its own unit tests as well.
+add_subdirectory(lexang)
