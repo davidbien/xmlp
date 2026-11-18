@@ -3,5 +3,11 @@
     "string": "cpp",
     "tuple": "cpp"
   },
-  "cmake.configureOnOpen": false
+  "cmake.configureOnOpen": false,
+  "cSpell.enabledFileTypes": {
+    "c": false,
+    "cpp": false
+  },
+  "C_Cpp.intelliSenseEngine": "default",
+  "clangd.enable": false
 }
