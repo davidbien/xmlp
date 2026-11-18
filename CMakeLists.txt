@@ -16,6 +16,9 @@ enable_testing()
 
 include ( bienutil/bienutil.cmake )
 
+# All test programs' JSON logs go in one directory, cleared at the start of each ctest run.
+bienutil_ctest_log_dir( "${CMAKE_BINARY_DIR}/testlogs" )
+
 set(GTEST_VERSION 1.14.0 CACHE STRING "Google test version")
 FetchContent_Declare(googletest
 GIT_REPOSITORY https://github.com/google/googletest.git
