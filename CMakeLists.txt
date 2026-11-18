@@ -116,6 +116,22 @@ gtest_discover_tests(xmlpgtest_doccopy
 endif()
 endforeach()
 
+# Malformed-input testing of the lexical analyzer's triggers - see the comments in xmlpgtest_malformed.cpp.
+add_executable (xmlpgtest_malformed xmlpgtest_malformed.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+target_include_directories(xmlpgtest_malformed PUBLIC
+  ${CMAKE_CURRENT_BINARY_DIR}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
+)
+target_link_libraries(xmlpgtest_malformed gtest)
+target_compile_definitions( xmlpgtest_malformed
+  PUBLIC __NDEBUG_THROW
+  PUBLIC TRACESENABLED=0
+)
+gtest_discover_tests(xmlpgtest_malformed)
+
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 #setup internal submodule include directories.
 target_include_directories(xmltestsame PUBLIC
