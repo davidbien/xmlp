@@ -155,3 +155,6 @@ add_subdirectory(dgraph)
 
 # lexang builds its own unit tests as well.
 add_subdirectory(lexang)
+
+# pgen ( the parser generator ) builds its own unit tests as well.
+add_subdirectory(pgen)
