@@ -2,8 +2,9 @@
 // Google test stuff for XML Parser.
 // The DTD: the tokens of the DTD DFAs of the lexical analyzers and the parser generated for the DTD ( xmlpgen_dtd.cpp ).
 // The text of a document type declaration, an external subset or the replacement text of a parameter entity is parsed
-//  in UTF-8, UTF-16 and UTF-32 - the one parser with each of the three lexical analyzers - into the parse tree, which is
-//  all there is as yet: nothing is done with the declarations.
+//  in UTF-8, UTF-16 and UTF-32 - the one parser with each of the three lexical analyzers - into the parse tree: that
+//  tests the tokens and the grammar. And it is read into an xml_dtd by xml_dtd_parser ( xml_dtd.h ): that tests what is
+//  made of the declarations.
 // And the W3C XML Conformance Test Suite ( unittests/xmlconf ): the document type declarations of its documents and its
 //  external subsets are parsed - see DtdConformance below for what is expected of them.
 // LEXOBJ_STRICT is defined so that the lexical analyzer verifies that no trigger data is left behind by a token or by a
@@ -43,8 +44,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "syslogmgr.inl"
 #include "_compat.inl"
 #include "xml_inc.h"
-#include "_p_lexang.h"
-#include "_xmlpdtd.h"
+#include "xml_dtd.h"
 #include "gtest/gtest.h"
 
 __BIENUTIL_USING_NAMESPACE
@@ -424,6 +424,351 @@ TYPED_TEST( DtdTest, ExternalSubset )
   EXPECT_EQ( lambdaTree( "<?xml encoding='x'?>", s_knEntry_extSubsetDecl ).substr( 0, 6 ), "ERROR:" );
 }
 
+// Reading the declarations into an xml_dtd - xml_dtd_parser.
+template < class t_TyChar >
+std::string StrNarrow( std::basic_string_view< t_TyChar > _sv )
+{
+  std::string str;
+  for ( t_TyChar ch : _sv )
+    str += ( ( ch >= 0x20 ) && ( ch < 0x7f ) ) ? char( ch ) : '?';
+  return str;
+}
+template < class t_TyChar >
+std::string StrNarrow( std::basic_string< t_TyChar > const & _rstr )
+{
+  return StrNarrow( std::basic_string_view< t_TyChar >( _rstr ) );
+}
+// Read the text: a document from its "<!DOCTYPE" or an external subset. Return the error - empty if there is none.
+template < class t_TyChar >
+std::string StrReadDtdText( std::basic_string_view< t_TyChar > _svText, bool _fExternalSubset, xml_dtd< t_TyChar > & _rdtd, bool _fStandalone = false )
+{
+  try
+  {
+    xml_dtd_parser< t_TyChar > dtdParser( _rdtd );
+    dtdParser.SetStandalone( _fStandalone );
+    if ( _fExternalSubset )
+      dtdParser.ParseExternalSubset( _svText );
+    else
+    {
+      xml_parser< xml_traits< _l_transport_fixedmem< t_TyChar >, false, false > > xmlParser;
+      xmlParser.emplaceTransport( _svText.data(), _svText.length() );
+      dtdParser.ParseDoctypeDecl( xmlParser.GetLexicalAnalyzer() );
+    }
+  }
+  catch ( std::exception const & rexc )
+  {
+    std::string strError = rexc.what();
+    return strError.empty() ? std::string( "error" ) : strError;
+  }
+  return std::string();
+}
+template < class t_TyChar >
+std::string StrReadDtd( const char * _pszText, xml_dtd< t_TyChar > & _rdtd, bool _fExternalSubset = false, bool _fStandalone = false )
+{
+  const std::basic_string< t_TyChar > strText( _pszText, _pszText + strlen( _pszText ) );
+  return StrReadDtdText< t_TyChar >( strText, _fExternalSubset, _rdtd, _fStandalone );
+}
+// A content model as it is written - without white space.
+template < class t_TyChar >
+std::string StrContentParticle( xml_dtd_content_particle< t_TyChar > const & _rcp )
+{
+  std::string str;
+  if ( exdpName == _rcp.m_eParticle )
+    str = StrNarrow( _rcp.m_strName );
+  else
+  {
+    str = "(";
+    for ( size_t n = 0; n < _rcp.m_rgChildren.size(); ++n )
+      str += ( !n ? "" : ( ( exdpChoice == _rcp.m_eParticle ) ? "|" : "," ) ) + StrContentParticle( _rcp.m_rgChildren[ n ] );
+    str += ")";
+  }
+  static const char * const s_rgpszOccurrence[] = { "", "?", "*", "+" };
+  return str + s_rgpszOccurrence[ _rcp.m_eOccurrence ];
+}
+template < class t_TyChar >
+std::string StrJoin( std::vector< std::basic_string< t_TyChar > > const & _rrgstr )
+{
+  std::string str;
+  for ( std::basic_string< t_TyChar > const & rstr : _rrgstr )
+    str += ( str.empty() ? "" : " " ) + StrNarrow( rstr );
+  return str;
+}
+template < class t_TyChar >
+std::basic_string< t_TyChar > StrWiden( const char * _psz )
+{
+  return std::basic_string< t_TyChar >( _psz, _psz + strlen( _psz ) );
+}
+
+// What the declarations declare.
+TYPED_TEST( DtdTest, Declarations )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  xml_dtd< TyChar > dtd;
+  ASSERT_EQ( StrReadDtd< TyChar >(
+    "<!DOCTYPE doc PUBLIC '-//X//DTD doc//EN' \"doc.dtd\" [\n"
+    "<!ELEMENT doc (head, (para | list)*, foot?)>\n"
+    "<!ELEMENT head (#PCDATA)>\n"
+    "<!ELEMENT para (#PCDATA | em | strong)*>\n"
+    "<!ELEMENT list (item+)>\n"
+    "<!ELEMENT item ANY>\n"
+    "<!ELEMENT br EMPTY>\n"
+    "<!ELEMENT deep ((a|b)+,(c,(d|e)?)*)+ >\n"
+    "<!ATTLIST doc id ID #REQUIRED\n"
+    "              lang NMTOKEN 'en'\n"
+    "              version CDATA #FIXED \"1.0\">\n"
+    "<!ATTLIST para align (left | right|center) \"left\" refs IDREFS #IMPLIED pic ENTITY #IMPLIED fmt NOTATION (gif|png) #IMPLIED>\n"
+    "<!ATTLIST para align CDATA #IMPLIED extra NMTOKENS #IMPLIED>\n" // align is declared: the first binds - extra is added.
+    "<!ATTLIST undeclared x ENTITIES #IMPLIED y IDREF #IMPLIED>\n"
+    "<!ENTITY copy \"&#169; &#x41;&#66; &amp; &other; 'q'\">\n"
+    "<!ENTITY copy 'the second declaration'>\n"
+    "<!ENTITY empty ''>\n"
+    "<!ENTITY chapter SYSTEM 'chapter.xml'>\n"
+    "<!ENTITY logo PUBLIC \"-//X//logo\" 'logo.gif' NDATA gif>\n"
+    "<!ENTITY % pe \"a parameter entity\">\n"
+    "<!ENTITY % ext SYSTEM 'ext.ent'>\n"
+    "<!NOTATION gif SYSTEM 'image/gif'>\n"
+    "<!NOTATION png PUBLIC '-//X//png'>\n"
+    "<!NOTATION jpg PUBLIC '-//X//jpg' \"image/jpeg\">\n"
+    "<!-- a comment --><?pi a processing instruction?>\n"
+    "]>", dtd ), "" );
+  // The document type declaration.
+  EXPECT_EQ( StrNarrow( dtd.m_strRootName ), "doc" );
+  ASSERT_TRUE( dtd.m_optExternalId.has_value() );
+  EXPECT_EQ( StrNarrow( *dtd.m_optExternalId->m_optstrPublic ), "-//X//DTD doc//EN" );
+  EXPECT_EQ( StrNarrow( *dtd.m_optExternalId->m_optstrSystem ), "doc.dtd" );
+  EXPECT_TRUE( dtd.m_fHasInternalSubset );
+  EXPECT_FALSE( dtd.m_fStoppedProcessingDeclarations );
+  EXPECT_TRUE( dtd.m_rgstrValidityErrors.empty() );
+  // The element types.
+  EXPECT_EQ( dtd.m_mapElements.size(), 7u );
+  ASSERT_TRUE( !!dtd.PGetElement( W( "doc" ) ) );
+  EXPECT_EQ( dtd.PGetElement( W( "doc" ) )->m_eContent, exdcChildren );
+  EXPECT_EQ( StrContentParticle( dtd.PGetElement( W( "doc" ) )->m_cpChildren ), "(head,(para|list)*,foot?)" );
+  EXPECT_EQ( StrContentParticle( dtd.PGetElement( W( "list" ) )->m_cpChildren ), "(item+)" );
+  EXPECT_EQ( StrContentParticle( dtd.PGetElement( W( "deep" ) )->m_cpChildren ), "((a|b)+,(c,(d|e)?)*)+" );
+  EXPECT_EQ( dtd.PGetElement( W( "head" ) )->m_eContent, exdcMixed );
+  EXPECT_TRUE( dtd.PGetElement( W( "head" ) )->m_rgstrMixedNames.empty() );
+  EXPECT_EQ( dtd.PGetElement( W( "para" ) )->m_eContent, exdcMixed );
+  EXPECT_EQ( StrJoin( dtd.PGetElement( W( "para" ) )->m_rgstrMixedNames ), "em strong" );
+  EXPECT_EQ( dtd.PGetElement( W( "item" ) )->m_eContent, exdcAny );
+  EXPECT_EQ( dtd.PGetElement( W( "br" ) )->m_eContent, exdcEmpty );
+  EXPECT_TRUE( !dtd.PGetElement( W( "em" ) ) );
+  // The attributes.
+  ASSERT_TRUE( !!dtd.PGetAttList( W( "doc" ) ) );
+  ASSERT_EQ( dtd.PGetAttList( W( "doc" ) )->size(), 3u );
+  EXPECT_EQ( dtd.PGetAttDef( W( "doc" ), W( "id" ) )->m_eType, exdatID );
+  EXPECT_EQ( dtd.PGetAttDef( W( "doc" ), W( "id" ) )->m_eDefault, exdadRequired );
+  EXPECT_EQ( dtd.PGetAttDef( W( "doc" ), W( "lang" ) )->m_eType, exdatNMTOKEN );
+  EXPECT_EQ( dtd.PGetAttDef( W( "doc" ), W( "lang" ) )->m_eDefault, exdadDefault );
+  EXPECT_EQ( StrNarrow( dtd.PGetAttDef( W( "doc" ), W( "lang" ) )->m_strDefault ), "en" );
+  EXPECT_EQ( dtd.PGetAttDef( W( "doc" ), W( "version" ) )->m_eType, exdatCDATA );
+  EXPECT_EQ( dtd.PGetAttDef( W( "doc" ), W( "version" ) )->m_eDefault, exdadFixed );
+  EXPECT_EQ( StrNarrow( dtd.PGetAttDef( W( "doc" ), W( "version" ) )->m_strDefault ), "1.0" );
+  ASSERT_EQ( dtd.PGetAttList( W( "para" ) )->size(), 5u ); // align, refs, pic, fmt and extra from the second declaration.
+  EXPECT_EQ( dtd.PGetAttDef( W( "para" ), W( "align" ) )->m_eType, exdatEnumeration ); // The first declaration.
+  EXPECT_EQ( StrJoin( dtd.PGetAttDef( W( "para" ), W( "align" ) )->m_rgstrEnumeration ), "left right center" );
+  EXPECT_EQ( StrNarrow( dtd.PGetAttDef( W( "para" ), W( "align" ) )->m_strDefault ), "left" );
+  EXPECT_EQ( dtd.PGetAttDef( W( "para" ), W( "refs" ) )->m_eType, exdatIDREFS );
+  EXPECT_EQ( dtd.PGetAttDef( W( "para" ), W( "refs" ) )->m_eDefault, exdadImplied );
+  EXPECT_EQ( dtd.PGetAttDef( W( "para" ), W( "pic" ) )->m_eType, exdatENTITY );
+  EXPECT_EQ( dtd.PGetAttDef( W( "para" ), W( "fmt" ) )->m_eType, exdatNOTATION );
+  EXPECT_EQ( StrJoin( dtd.PGetAttDef( W( "para" ), W( "fmt" ) )->m_rgstrEnumeration ), "gif png" );
+  EXPECT_EQ( dtd.PGetAttDef( W( "para" ), W( "extra" ) )->m_eType, exdatNMTOKENS );
+  EXPECT_EQ( dtd.PGetAttDef( W( "undeclared" ), W( "x" ) )->m_eType, exdatENTITIES ); // Attributes may be declared for an element type which isn't.
+  EXPECT_EQ( dtd.PGetAttDef( W( "undeclared" ), W( "y" ) )->m_eType, exdatIDREF );
+  EXPECT_TRUE( !dtd.PGetAttDef( W( "doc" ), W( "none" ) ) );
+  EXPECT_TRUE( !dtd.PGetAttList( W( "br" ) ) );
+  // The entities. The replacement text: character references are replaced and general entity references are not.
+  EXPECT_EQ( dtd.m_mapGeneralEntities.size(), 4u );
+  ASSERT_TRUE( !!dtd.PGetGeneralEntity( W( "copy" ) ) );
+  {
+    std::basic_string< TyChar > strExpected;
+    const char32_t chCopyright = 0xA9;
+    ConvertString( strExpected, &chCopyright, 1 ); // One, two or one code units.
+    strExpected += W( " AB &amp; &other; 'q'" );
+    EXPECT_TRUE( dtd.PGetGeneralEntity( W( "copy" ) )->m_strValue == strExpected ); // The first declaration.
+  }
+  EXPECT_TRUE( dtd.PGetGeneralEntity( W( "copy" ) )->m_fInternal );
+  EXPECT_FALSE( dtd.PGetGeneralEntity( W( "copy" ) )->m_fParameter );
+  EXPECT_FALSE( dtd.PGetGeneralEntity( W( "copy" ) )->m_fDeclaredExternally );
+  EXPECT_TRUE( dtd.PGetGeneralEntity( W( "empty" ) )->m_strValue.empty() );
+  EXPECT_FALSE( dtd.PGetGeneralEntity( W( "chapter" ) )->m_fInternal );
+  EXPECT_FALSE( dtd.PGetGeneralEntity( W( "chapter" ) )->FIsUnparsed() );
+  EXPECT_EQ( StrNarrow( *dtd.PGetGeneralEntity( W( "chapter" ) )->m_externalId.m_optstrSystem ), "chapter.xml" );
+  EXPECT_FALSE( dtd.PGetGeneralEntity( W( "chapter" ) )->m_externalId.m_optstrPublic.has_value() );
+  EXPECT_TRUE( dtd.PGetGeneralEntity( W( "logo" ) )->FIsUnparsed() );
+  EXPECT_EQ( StrNarrow( dtd.PGetGeneralEntity( W( "logo" ) )->m_strNotation ), "gif" );
+  EXPECT_EQ( StrNarrow( *dtd.PGetGeneralEntity( W( "logo" ) )->m_externalId.m_optstrPublic ), "-//X//logo" );
+  EXPECT_EQ( StrNarrow( *dtd.PGetGeneralEntity( W( "logo" ) )->m_externalId.m_optstrSystem ), "logo.gif" );
+  EXPECT_EQ( dtd.m_mapParameterEntities.size(), 2u );
+  EXPECT_EQ( StrNarrow( dtd.PGetParameterEntity( W( "pe" ) )->m_strValue ), "a parameter entity" );
+  EXPECT_TRUE( dtd.PGetParameterEntity( W( "pe" ) )->m_fParameter );
+  EXPECT_FALSE( dtd.PGetParameterEntity( W( "ext" ) )->m_fInternal );
+  EXPECT_TRUE( !dtd.PGetGeneralEntity( W( "pe" ) ) ); // General and parameter entities are different names.
+  // The notations.
+  EXPECT_EQ( dtd.m_mapNotations.size(), 3u );
+  EXPECT_EQ( StrNarrow( *dtd.PGetNotation( W( "gif" ) )->m_externalId.m_optstrSystem ), "image/gif" );
+  EXPECT_FALSE( dtd.PGetNotation( W( "gif" ) )->m_externalId.m_optstrPublic.has_value() );
+  EXPECT_EQ( StrNarrow( *dtd.PGetNotation( W( "png" ) )->m_externalId.m_optstrPublic ), "-//X//png" );
+  EXPECT_FALSE( dtd.PGetNotation( W( "png" ) )->m_externalId.m_optstrSystem.has_value() );
+  EXPECT_EQ( StrNarrow( *dtd.PGetNotation( W( "jpg" ) )->m_externalId.m_optstrSystem ), "image/jpeg" );
+
+  // Without an external subset or an internal one.
+  xml_dtd< TyChar > dtdBare;
+  ASSERT_EQ( StrReadDtd< TyChar >( "<!DOCTYPE a>", dtdBare ), "" );
+  EXPECT_EQ( StrNarrow( dtdBare.m_strRootName ), "a" );
+  EXPECT_FALSE( dtdBare.m_optExternalId.has_value() );
+  EXPECT_FALSE( dtdBare.m_fHasInternalSubset );
+  // A character which is more than one code unit in UTF-16 and in UTF-8.
+  xml_dtd< TyChar > dtdChar;
+  ASSERT_EQ( StrReadDtd< TyChar >( "<!DOCTYPE a [<!ENTITY e 'x&#x1F600;y'>]>", dtdChar ), "" );
+  EXPECT_EQ( dtdChar.PGetGeneralEntity( W( "e" ) )->m_strValue.length(), 2u + ( ( sizeof( TyChar ) == 1 ) ? 4u : ( ( sizeof( TyChar ) == 2 ) ? 2u : 1u ) ) );
+  // Not a character.
+  xml_dtd< TyChar > dtdBadChar;
+  EXPECT_NE( StrReadDtd< TyChar >( "<!DOCTYPE a [<!ENTITY e 'x&#0;y'>]>", dtdBadChar ), "" );
+  // Not well formed: the error of the parser.
+  xml_dtd< TyChar > dtdBad;
+  EXPECT_NE( StrReadDtd< TyChar >( "<!DOCTYPE a [<!ELEMENT a (b,c|d)>]>", dtdBad ).find( "The DTD is not well formed: syntax error: unexpected ['|']" ), std::string::npos );
+}
+
+// The validity constraints which the declarations themselves don't meet are recorded - the DTD is read all the same.
+TYPED_TEST( DtdTest, ValidityOfDeclarations )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  xml_dtd< TyChar > dtd;
+  ASSERT_EQ( StrReadDtd< TyChar >(
+    "<!DOCTYPE a [\n"
+    "<!ELEMENT a EMPTY>\n"
+    "<!ELEMENT a ANY>\n"
+    "<!ELEMENT b (#PCDATA|x|y|x)*>\n"
+    "<!ATTLIST a e (one|two|one) #IMPLIED n NOTATION (g|g) #IMPLIED>\n"
+    "<!NOTATION g SYSTEM 's'>\n"
+    "<!NOTATION g SYSTEM 't'>\n"
+    "]>", dtd ), "" );
+  EXPECT_EQ( dtd.m_rgstrValidityErrors, ( std::vector< std::string >{
+    "Element type [a] is declared more than once.",
+    "Element type [x] is more than once in a mixed content declaration.",
+    "[one] is more than once in the enumerated type of an attribute.",
+    "[g] is more than once in the enumerated type of an attribute.",
+    "Notation [g] is declared more than once." } ) );
+  // What was declared first is what there is.
+  EXPECT_EQ( dtd.PGetElement( W( "a" ) )->m_eContent, exdcEmpty );
+  EXPECT_EQ( StrJoin( dtd.PGetElement( W( "b" ) )->m_rgstrMixedNames ), "x y" );
+  EXPECT_EQ( StrJoin( dtd.PGetAttDef( W( "a" ), W( "e" ) )->m_rgstrEnumeration ), "one two" );
+  EXPECT_EQ( StrNarrow( *dtd.PGetNotation( W( "g" ) )->m_externalId.m_optstrSystem ), "s" );
+}
+
+// References to parameter entities.
+TYPED_TEST( DtdTest, ParameterEntities )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  // Between declarations: the replacement text is declarations.
+  {
+    xml_dtd< TyChar > dtd;
+    ASSERT_EQ( StrReadDtd< TyChar >(
+      "<!DOCTYPE a [\n"
+      "<!ENTITY % decls \"<!ELEMENT a (b)> <!ATTLIST a x CDATA #IMPLIED> <!ENTITY inner 'from decls'>\">\n"
+      "<!ENTITY % outer '&#37;decls; <!ELEMENT b EMPTY>'>\n" // '%' by a character reference: a reference may not be written within a declaration here.
+      "<!ENTITY % empty ''>\n"
+      "%outer; %empty;\n"
+      "<!ENTITY inner 'the second declaration'>\n"
+      "<!ELEMENT c EMPTY>\n"
+      "]>", dtd ), "" );
+    EXPECT_EQ( dtd.m_mapElements.size(), 3u );
+    EXPECT_EQ( StrContentParticle( dtd.PGetElement( W( "a" ) )->m_cpChildren ), "(b)" );
+    EXPECT_EQ( dtd.PGetElement( W( "b" ) )->m_eContent, exdcEmpty );
+    EXPECT_TRUE( !!dtd.PGetAttDef( W( "a" ), W( "x" ) ) );
+    EXPECT_EQ( StrNarrow( dtd.PGetGeneralEntity( W( "inner" ) )->m_strValue ), "from decls" );
+    EXPECT_TRUE( dtd.PGetGeneralEntity( W( "inner" ) )->m_fDeclaredExternally ); // Declared in a parameter entity.
+    EXPECT_FALSE( dtd.PGetParameterEntity( W( "decls" ) )->m_fDeclaredExternally );
+    EXPECT_EQ( StrNarrow( dtd.PGetParameterEntity( W( "outer" ) )->m_strValue ), "%decls; <!ELEMENT b EMPTY>" );
+    EXPECT_FALSE( dtd.m_fStoppedProcessingDeclarations );
+  }
+  // Well-formedness constraints.
+  auto lambdaError = []( const char * _pszSubset, bool _fStandalone = false ) -> std::string
+  {
+    xml_dtd< TyChar > dtd;
+    return StrReadDtd< TyChar >( ( std::string( "<!DOCTYPE a [" ) + _pszSubset + "]>" ).c_str(), dtd, false, _fStandalone );
+  };
+  // A parameter entity must be declared before it is referenced: for a standalone document that is well-formedness.
+  EXPECT_NE( lambdaError( "%nope;", true ).find( "the parameter entity [nope] is referenced but not declared" ), std::string::npos );
+  EXPECT_NE( lambdaError( "%later; <!ENTITY % later ''>", true ).find( "the parameter entity [later] is referenced but not declared" ), std::string::npos );
+  // Otherwise it is validity: it is recorded, and the entity and attribute-list declarations after it are not processed.
+  {
+    xml_dtd< TyChar > dtd;
+    ASSERT_EQ( StrReadDtd< TyChar >( "<!DOCTYPE a [<!ENTITY before 'b'> %nope; <!ENTITY after 'a'> <!ELEMENT a EMPTY>]>", dtd ), "" );
+    EXPECT_EQ( dtd.m_rgstrValidityErrors, ( std::vector< std::string >{ "Parameter entity [nope] is referenced but not declared." } ) );
+    EXPECT_TRUE( dtd.m_fStoppedProcessingDeclarations );
+    EXPECT_TRUE( !!dtd.PGetGeneralEntity( W( "before" ) ) );
+    EXPECT_TRUE( !dtd.PGetGeneralEntity( W( "after" ) ) );
+    EXPECT_TRUE( !!dtd.PGetElement( W( "a" ) ) );
+  }
+  EXPECT_NE( lambdaError( "<!ENTITY % a '&#37;a;'> %a;" ).find( "the parameter entity [a] contains a reference to itself" ), std::string::npos );
+  EXPECT_NE( lambdaError( "<!ENTITY % a '&#37;b;'> <!ENTITY % b '&#37;a;'> %a;" ).find( "contains a reference to itself" ), std::string::npos );
+  EXPECT_NE( lambdaError( "<!ENTITY % p 'v'> <!ENTITY e 'a %p; b'>" ).find( "the parameter entity reference [%p;] is within a declaration in the internal subset" ), std::string::npos );
+  // The replacement text must be declarations.
+  EXPECT_NE( lambdaError( "<!ENTITY % half '<!ELEMENT a'> %half; EMPTY>" ).find( "The DTD is not well formed: syntax error" ), std::string::npos );
+  EXPECT_NE( lambdaError( "<!ENTITY % text 'just text'> %text;" ).find( "The DTD is not well formed: syntax error" ), std::string::npos );
+  EXPECT_EQ( lambdaError( "<!ENTITY % ok '<!ELEMENT a EMPTY>'> %ok;" ), "" );
+
+  // An external parameter entity isn't read: the entity and attribute-list declarations after the reference are not
+  //  processed - the element type and notation declarations are.
+  {
+    xml_dtd< TyChar > dtd;
+    ASSERT_EQ( StrReadDtd< TyChar >(
+      "<!DOCTYPE a [\n"
+      "<!ENTITY before 'b'>\n"
+      "<!ENTITY % ext SYSTEM 'ext.ent'>\n"
+      "%ext;\n"
+      "<!ENTITY after 'a'>\n"
+      "<!ENTITY % pafter 'p'>\n"
+      "<!ATTLIST a x CDATA #IMPLIED>\n"
+      "<!ELEMENT a EMPTY>\n"
+      "<!NOTATION n SYSTEM 's'>\n"
+      "%unknown;\n" // It may have been declared in what wasn't read: not an error of well-formedness - even for a standalone document.
+      "]>", dtd, false, true ), "" );
+    EXPECT_TRUE( dtd.m_fStoppedProcessingDeclarations );
+    EXPECT_TRUE( !!dtd.PGetGeneralEntity( W( "before" ) ) );
+    EXPECT_TRUE( !dtd.PGetGeneralEntity( W( "after" ) ) );
+    EXPECT_TRUE( !dtd.PGetParameterEntity( W( "pafter" ) ) );
+    EXPECT_TRUE( !dtd.PGetAttList( W( "a" ) ) );
+    EXPECT_TRUE( !!dtd.PGetElement( W( "a" ) ) );
+    EXPECT_TRUE( !!dtd.PGetNotation( W( "n" ) ) );
+    EXPECT_EQ( dtd.m_rgstrValidityErrors, ( std::vector< std::string >{ "Parameter entity [unknown] is referenced but not declared." } ) );
+  }
+}
+
+// The external subset: a parameter entity reference may be within an entity value there, and conditional sections.
+TYPED_TEST( DtdTest, ExternalSubsetDeclarations )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  xml_dtd< TyChar > dtd;
+  ASSERT_EQ( StrReadDtd< TyChar >(
+    "<?xml version='1.0' encoding='UTF-8'?>\n"
+    "<!ENTITY % p 'P&#38;Q'>\n"
+    "<!ENTITY e \"a %p; b %p;\">\n"
+    "<![INCLUDE[ <!ELEMENT included EMPTY> <![IGNORE[ <!ELEMENT ignored EMPTY> <![ nested ]]> ]]> ]]>\n"
+    "<![ IGNORE [ <!ELEMENT ignored2 EMPTY> ]]>\n"
+    "<!ELEMENT last ANY>\n", dtd, true ), "" );
+  EXPECT_EQ( StrNarrow( dtd.PGetParameterEntity( W( "p" ) )->m_strValue ), "P&Q" );
+  EXPECT_EQ( StrNarrow( dtd.PGetGeneralEntity( W( "e" ) )->m_strValue ), "a P&Q b P&Q" );
+  EXPECT_TRUE( dtd.PGetGeneralEntity( W( "e" ) )->m_fDeclaredExternally );
+  EXPECT_EQ( dtd.m_mapElements.size(), 2u );
+  EXPECT_TRUE( !!dtd.PGetElement( W( "included" ) ) );
+  EXPECT_TRUE( !!dtd.PGetElement( W( "last" ) ) );
+  EXPECT_TRUE( !dtd.PGetElement( W( "ignored" ) ) );
+  // A parameter entity must be declared before it is referenced within an entity value as well.
+  xml_dtd< TyChar > dtdBad;
+  EXPECT_NE( StrReadDtd< TyChar >( "<!ENTITY e 'a %p; b'>", dtdBad, true, true ).find( "the parameter entity [p] is referenced but not declared" ), std::string::npos );
+  xml_dtd< TyChar > dtdInvalid;
+  EXPECT_EQ( StrReadDtd< TyChar >( "<!ENTITY e 'a %p; b'>", dtdInvalid, true ), "" );
+  EXPECT_EQ( dtdInvalid.m_rgstrValidityErrors.size(), 1u );
+}
+
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.
 // The suite tests whole documents and we only have the DTD as yet, so what is tested is what can be said of the DTD alone:
 //  - WellFormedDocuments: the document type declaration of every document which the suite says is well formed - valid or
@@ -431,6 +776,8 @@ TYPED_TEST( DtdTest, ExternalSubset )
 //  - NotWellFormedDeclarations: the document type declaration of every document which IBM's tests of the productions of
 //    the declarations say is not well formed is rejected. ( For the other productions what is wrong is elsewhere - in the
 //    external subset, in the document itself or in a constraint which is not grammar. )
+//  - ReadWellFormedDocuments: the same documents are read into an xml_dtd by xml_dtd_parser without an error - and those
+//    of IBM's tests which are not well formed for a reason which the reading finds are not.
 //  - ExternalSubsets: the external subsets of well formed documents are accepted - but for those which have references
 //    to parameter entities within declarations, which aren't substituted yet: those are listed and must be rejected at
 //    the reference, so that the list is found to be out of date when they are. And those which the tests of the
@@ -483,7 +830,8 @@ size_t NFindDoctype( std::basic_string_view< t_TyChar > _sv )
 }
 // Parse the document type declaration of the document in the file - or the file as an external subset.
 // No value if the file isn't parsed: it is in an encoding we don't do here or the document has no document type declaration.
-std::optional< DtdParseResult > ConformanceParse( fs::path const & _rpath, bool _fExternalSubset )
+// _fRead: read it into an xml_dtd with xml_dtd_parser rather than parsing it to the parse tree.
+std::optional< DtdParseResult > ConformanceParse( fs::path const & _rpath, bool _fExternalSubset, bool _fRead = false )
 {
   std::ifstream ifs( _rpath, std::ios::binary );
   std::stringstream ss;
@@ -491,12 +839,23 @@ std::optional< DtdParseResult > ConformanceParse( fs::path const & _rpath, bool 
   const std::string strBytes = ss.str();
   auto lambdaParse = [&]< class t_TyChar >( std::basic_string_view< t_TyChar > _sv ) -> std::optional< DtdParseResult >
   {
-    if ( _fExternalSubset )
-      return DtdTester< t_TyChar >::ParseText( _sv, s_knEntry_extSubset );
-    const size_t nPosDoctype = NFindDoctype( _sv );
-    if ( std::string::npos == nPosDoctype )
-      return std::nullopt;
-    return DtdTester< t_TyChar >::ParseText( _sv.substr( nPosDoctype ), s_knEntry_doctypedecl );
+    size_t nPosDoctype = 0;
+    if ( !_fExternalSubset )
+    {
+      nPosDoctype = NFindDoctype( _sv );
+      if ( std::string::npos == nPosDoctype )
+        return std::nullopt;
+    }
+    if ( !_fRead )
+      return DtdTester< t_TyChar >::ParseText( _sv.substr( nPosDoctype ), _fExternalSubset ? s_knEntry_extSubset : s_knEntry_doctypedecl );
+    DtdParseResult result;
+    xml_dtd< t_TyChar > dtd;
+    // Whether the document is declared to be standalone matters: it is in the XML declaration, before the "<!DOCTYPE".
+    const std::basic_string_view< t_TyChar > svProlog = _sv.substr( 0, nPosDoctype );
+    const bool fStandalone = ( std::string::npos != NFind( svProlog, 0, "standalone=\"yes\"" ) ) || ( std::string::npos != NFind( svProlog, 0, "standalone='yes'" ) );
+    result.m_strError = StrReadDtdText< t_TyChar >( _sv.substr( nPosDoctype ), _fExternalSubset, dtd, fStandalone );
+    result.m_fAccepted = result.m_strError.empty();
+    return result;
   };
   auto lambdaByte = [&]( size_t _n ) -> unsigned char { return ( _n < strBytes.size() ) ? (unsigned char)strBytes[ _n ] : 0; };
   const bool fLittleEndian16 = ( lambdaByte( 0 ) == 0xff ) && ( lambdaByte( 1 ) == 0xfe ) && !( !lambdaByte( 2 ) && !lambdaByte( 3 ) );
@@ -572,6 +931,36 @@ TEST( DtdConformance, WellFormedDocuments )
     EXPECT_TRUE( optResult->m_fAccepted ) << rstrFile << ": " << optResult->m_strError;
   }
   EXPECT_GE( nParsed, 500u ) << "of " << rgstrFiles.size();
+}
+
+TEST( DtdConformance, ReadWellFormedDocuments )
+{
+  if ( !FHaveConformanceSuite() )
+    GTEST_SKIP() << "No conformance suite at " << XMLP_XMLCONF_DIR;
+  size_t nRead = 0;
+  for ( const char * pszDir : { "ibm/valid", "ibm/invalid", "sun/valid", "sun/invalid", "xmltest/valid", "xmltest/invalid" } )
+  {
+    for ( std::string const & rstrFile : RgConformanceFiles( pszDir, ".xml" ) )
+    {
+      const std::optional< DtdParseResult > optResult = ConformanceParse( PathConformanceFile( rstrFile ), false, true );
+      if ( !optResult )
+        continue;
+      ++nRead;
+      EXPECT_TRUE( optResult->m_fAccepted ) << rstrFile << ": " << optResult->m_strError;
+    }
+  }
+  EXPECT_GE( nRead, 450u );
+  // Not well formed for what the grammar doesn't say: a parameter entity reference within a declaration in the internal
+  //  subset, a parameter entity referenced before it is declared in a standalone document.
+  for ( const char * pszFile : { "ibm/not-wf/P29/ibm29n04.xml", "ibm/not-wf/P69/ibm69n05.xml", "ibm/not-wf/P69/ibm69n06.xml" } )
+  {
+    const std::optional< DtdParseResult > optResult = ConformanceParse( PathConformanceFile( pszFile ), false, true );
+    ASSERT_TRUE( optResult.has_value() ) << pszFile;
+    EXPECT_FALSE( optResult->m_fAccepted ) << pszFile;
+    // The grammar alone accepts them.
+    const std::optional< DtdParseResult > optResultGrammar = ConformanceParse( PathConformanceFile( pszFile ), false, false );
+    EXPECT_TRUE( optResultGrammar.has_value() && optResultGrammar->m_fAccepted ) << pszFile;
+  }
 }
 
 TEST( DtdConformance, NotWellFormedDeclarations )

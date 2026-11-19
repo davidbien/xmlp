@@ -123,31 +123,36 @@ GenerateDtdParser( ns_pg::LexerModes< vtyTokenIdent > const & _rmodes )
   g.AddEntryNonTerminal( extSubsetDecl ); // The replacement text of a parameter entity referenced between declarations - [28a], [31].
 
 // The productions. EBNF as lexang's: x * y: y follows x, x | y: x or y, ~x: zero or more, ++x: one or more, --x: optional.
-  doctypedecl = kwDOCTYPE * S * Name * ( S * ExternalID * --S | --S ) * --( lbracket * intSubset * rbracket * --S ) * gt; // [28] As written: '<!DOCTYPE' S Name (S ExternalID)? S? ('[' intSubset ']' S?)? '>'
-  DeclSep = PEReference | S; // [28a]
+// A production which declares something is named: the handler of the parser - xml_dtd_parser<> in xml_dtd.h - has a method
+//  of that name which is called when the production is recognized, with the value of each of its symbols. ( Where the
+//  alternatives of a production are named they are given one by one: each assignment adds to the non-terminal. )
+// The productions without a name are handled alike: one of a single symbol has the value of the symbol, any other has no value.
+  doctypedecl = ( kwDOCTYPE * S * Name * ( S * ExternalID * --S | --S ) * --( lbracket * intSubset * rbracket * --S ) * gt ).Name( "doctypedecl" ); // [28] As written: '<!DOCTYPE' S Name (S ExternalID)? S? ('[' intSubset ']' S?)? '>'
+  DeclSep = _TyGrammar::_TyCfgSequence( PEReference ).Name( "DeclSep_PEReference" ); // [28a] As written: PEReference | S
+  DeclSep = S;
   intSubset = ~( markupdecl | DeclSep ); // [28b]
   markupdecl = elementdecl | AttlistDecl | EntityDecl | NotationDecl | PI | Comment; // [29]
   extSubset = --TextDecl * extSubsetDecl; // [30]
   extSubsetDecl = ~( markupdecl | conditionalSect | DeclSep ); // [31]
-  elementdecl = kwELEMENT * S * Name * S * contentspec * --S * gt; // [45]
+  elementdecl = ( kwELEMENT * S * Name * S * contentspec * --S * gt ).Name( "elementdecl" ); // [45]
   contentspec = kwEMPTY | kwANY | Mixed | children; // [46]
-  children = ( choice | seq ) * --( qmark | star | plus ); // [47]
-  cp = ( Name | choice | seq ) * --( qmark | star | plus ); // [48]
-  choice = lparen * --S * cp * ++( --S * bar * --S * cp ) * --S * rparen; // [49]
-  seq = lparen * --S * cp * ++( --S * comma * --S * cp ) * --S * rparen
-      | lparen * --S * cp * --S * rparen; // [50] As written: '(' S? cp ( S? ',' S? cp )* S? ')'
-  Mixed = lparen * --S * kwPCDATA * ++( --S * bar * --S * Name ) * --S * rparen * star
-        | lparen * --S * kwPCDATA * --S * rparen * --star; // [51] As written: '(' S? '#PCDATA' (S? '|' S? Name)* S? ')*' | '(' S? '#PCDATA' S? ')'
-                                                           // ')*' is the two tokens ')' and '*': there can be nothing between them since S is a token.
-  AttlistDecl = kwATTLIST * S * Name * ~AttDef * --S * gt; // [52]
-  AttDef = S * Name * S * AttType * S * DefaultDecl; // [53]
+  children = ( ( choice | seq ) * --( qmark | star | plus ) ).Name( "children" ); // [47]
+  cp = ( ( Name | choice | seq ) * --( qmark | star | plus ) ).Name( "cp" ); // [48]
+  choice = ( lparen * --S * cp * ++( --S * bar * --S * cp ) * --S * rparen ).Name( "choice" ); // [49]
+  seq = ( lparen * --S * cp * ++( --S * comma * --S * cp ) * --S * rparen ).Name( "seq_list" ); // [50] As written: '(' S? cp ( S? ',' S? cp )* S? ')'
+  seq = ( lparen * --S * cp * --S * rparen ).Name( "seq_single" );
+  Mixed = ( lparen * --S * kwPCDATA * ++( --S * bar * --S * Name ) * --S * rparen * star ).Name( "Mixed_names" ); // [51] As written: '(' S? '#PCDATA' (S? '|' S? Name)* S? ')*' | '(' S? '#PCDATA' S? ')'
+  Mixed = ( lparen * --S * kwPCDATA * --S * rparen * --star ).Name( "Mixed_pcdata" ); // ')*' is the two tokens ')' and '*': there can be nothing between them since S is a token.
+  AttlistDecl = ( kwATTLIST * S * Name * ~AttDef * --S * gt ).Name( "AttlistDecl" ); // [52]
+  AttDef = ( S * Name * S * AttType * S * DefaultDecl ).Name( "AttDef" ); // [53]
   AttType = StringType | TokenizedType | EnumeratedType; // [54]
   StringType = kwCDATA; // [55]
   TokenizedType = kwID | kwIDREF | kwIDREFS | kwENTITYType | kwENTITIES | kwNMTOKEN | kwNMTOKENS; // [56]
   EnumeratedType = NotationType | Enumeration; // [57]
-  NotationType = kwNOTATIONType * S * lparen * --S * Name * ~( --S * bar * --S * Name ) * --S * rparen; // [58]
-  Enumeration = lparen * --S * Nmtoken * ~( --S * bar * --S * Nmtoken ) * --S * rparen; // [59]
-  DefaultDecl = kwREQUIRED | kwIMPLIED | --( kwFIXED * S ) * AttValue; // [60]
+  NotationType = ( kwNOTATIONType * S * lparen * --S * Name * ~( --S * bar * --S * Name ) * --S * rparen ).Name( "NotationType" ); // [58]
+  Enumeration = ( lparen * --S * Nmtoken * ~( --S * bar * --S * Nmtoken ) * --S * rparen ).Name( "Enumeration" ); // [59]
+  DefaultDecl = kwREQUIRED | kwIMPLIED; // [60] As written: '#REQUIRED' | '#IMPLIED' | (('#FIXED' S)? AttValue)
+  DefaultDecl = ( --( kwFIXED * S ) * AttValue ).Name( "DefaultDecl_value" );
   conditionalSect = includeSect | ignoreSect; // [61]
   includeSect = condStart * --S * kwINCLUDE * --S * lbracket * extSubsetDecl * condEnd; // [62]
   ignoreSect = condStart * --S * kwIGNORE * --S * lbracket * ignoreSectContents * condEnd; // [63] As written: ... '[' ignoreSectContents* ']]>'
@@ -155,14 +160,17 @@ GenerateDtdParser( ns_pg::LexerModes< vtyTokenIdent > const & _rmodes )
     // [65] Ignore ::= Char* - (Char* ('<![' | ']]>') Char*) - here the token Ignore is a piece of that and never empty, so
     //  Ignore is Ignore*. And [63]'s repetition of something which may be empty is ambiguous: it is one ignoreSectContents here.
   EntityDecl = GEDecl | PEDecl; // [70]
-  GEDecl = kwENTITY * S * Name * S * EntityDef * gt; // [71] As written: '<!ENTITY' S Name S EntityDef S? '>' - the S? is in EntityDef.
-  PEDecl = kwENTITY * S * percent * S * Name * S * PEDef * --S * gt; // [72]
-  EntityDef = EntityValue * --S | ExternalID * --S | ExternalID * NDataDecl * --S; // [73] As written: EntityValue | (ExternalID NDataDecl?) - with [71]'s S?.
+  GEDecl = ( kwENTITY * S * Name * S * EntityDef * gt ).Name( "GEDecl" ); // [71] As written: '<!ENTITY' S Name S EntityDef S? '>' - the S? is in EntityDef.
+  PEDecl = ( kwENTITY * S * percent * S * Name * S * PEDef * --S * gt ).Name( "PEDecl" ); // [72]
+  EntityDef = ( EntityValue * --S ).Name( "EntityDef_value" ); // [73] As written: EntityValue | (ExternalID NDataDecl?) - with [71]'s S?.
+  EntityDef = ( ExternalID * --S ).Name( "EntityDef_external" );
+  EntityDef = ( ExternalID * NDataDecl * --S ).Name( "EntityDef_unparsed" );
   PEDef = EntityValue | ExternalID; // [74]
-  ExternalID = kwSYSTEM * S * SystemLiteral | PublicID * S * SystemLiteral; // [75] As written: 'SYSTEM' S SystemLiteral | 'PUBLIC' S PubidLiteral S SystemLiteral
-  NDataDecl = S * kwNDATA * S * Name; // [76]
-  NotationDecl = kwNOTATION * S * Name * S * ( ExternalID * --S | PublicID * --S ) * gt; // [82] As written: '<!NOTATION' S Name S (ExternalID | PublicID) S? '>'
-  PublicID = kwPUBLIC * S * PubidLiteral; // [83]
+  ExternalID = ( kwSYSTEM * S * SystemLiteral ).Name( "ExternalID_system" ); // [75] As written: 'SYSTEM' S SystemLiteral | 'PUBLIC' S PubidLiteral S SystemLiteral
+  ExternalID = ( PublicID * S * SystemLiteral ).Name( "ExternalID_public" );
+  NDataDecl = ( S * kwNDATA * S * Name ).Name( "NDataDecl" ); // [76]
+  NotationDecl = ( kwNOTATION * S * Name * S * ( ExternalID * --S | PublicID * --S ) * gt ).Name( "NotationDecl" ); // [82] As written: '<!NOTATION' S Name S (ExternalID | PublicID) S? '>'
+  PublicID = ( kwPUBLIC * S * PubidLiteral ).Name( "PublicID" ); // [83]
 
   const bool fFinalized = g.FFinalize();
   for ( auto const & rgd : g.RgDiagnostics() )
