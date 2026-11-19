@@ -46,6 +46,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "_compat.inl"
 #include "xml_inc.h"
 #include "xml_inc.h"
+#include "xml_tag.h"
 #include "xml_dtd.h"
 #include "gtest/gtest.h"
 
@@ -810,6 +811,22 @@ struct CursorDocument
     m_cursor.GetContextCur().GetContentString( str );
     return str;
   }
+  // The attributes of the current tag: name="value" for each, in order.
+  std::string StrAttributes()
+  {
+    std::string str;
+    auto & rltokTag = m_cursor.GetTagCur().GetLexToken();
+    auto & rrgAttrs = rltokTag.GetValue()[ vknAttributesIdx ];
+    for ( size_t nAttr = 0; nAttr < rrgAttrs.GetSize(); ++nAttr )
+    {
+      std::basic_string_view< t_TyChar > svName, svValue;
+      // The value says what it is: what the tag has is in the document and what was added is a string.
+      rrgAttrs[ nAttr ][ vknNameIdx ].GetStringView( rltokTag, svName );
+      rrgAttrs[ nAttr ][ vknAttr_ValueIdx ].GetStringView( rltokTag, svValue );
+      str += ( str.empty() ? "" : " " ) + StrNarrow( svName ) + "=\"" + StrNarrow( svValue ) + "\"";
+    }
+    return str;
+  }
 };
 
 TYPED_TEST( DtdTest, Cursor )
@@ -915,6 +932,145 @@ TYPED_TEST( DtdTest, CursorDoctype )
   // XML traits which don't support the DTD: a document type declaration is not read - as it was before.
   EXPECT_FALSE( ( CursorDocument< TyChar, false >( "<!DOCTYPE a><a/>" ).FOpened() ) );
   EXPECT_TRUE( ( CursorDocument< TyChar, false >( "<a/>" ).FOpened() ) );
+}
+
+// The default values of attributes: what a declaration makes of the literal - 3.3.3.
+TYPED_TEST( DtdTest, AttributeDefaultValues )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  xml_dtd< TyChar > dtd;
+  ASSERT_EQ( StrReadDtd< TyChar >(
+    "<!DOCTYPE a [\n"
+    "<!ENTITY co 'Bien\t&amp;  Co'>\n"
+    "<!ENTITY deep '[&co;]'>\n"
+    "<!ATTLIST a\n"
+    "  plain CDATA 'a value'\n"
+    "  spaces CDATA '  two  spaces\there  '\n"
+    "  tokens NMTOKENS '  one   two\n three '\n"
+    "  refs CDATA 'x&#32;&#x9;y &lt;&#38;&gt; &deep;'\n"
+    "  id IDREF ' &#32; i '\n"
+    "  fixed CDATA #FIXED \"f\"\n"
+    "  required CDATA #REQUIRED\n"
+    "  implied CDATA #IMPLIED\n"
+    "  empty CDATA ''>\n"
+    "]>", dtd ), "" );
+  auto lambdaDefault = [&]( const char * _pszAttr ) -> std::string
+  {
+    const xml_dtd_attdef< TyChar > * pad = dtd.PGetAttDef( W( "a" ), W( _pszAttr ) );
+    return !pad ? std::string( "NONE" ) : ( pad->m_fHasDefaultValue ? ( "[" + StrNarrow( pad->m_strDefaultValue ) + "]" ) : std::string( "no default" ) );
+  };
+  EXPECT_EQ( lambdaDefault( "plain" ), "[a value]" );
+  EXPECT_EQ( lambdaDefault( "spaces" ), "[  two  spaces here  ]" ); // CDATA: each white space character is a space - nothing more.
+  EXPECT_EQ( lambdaDefault( "tokens" ), "[one two three]" ); // Not CDATA: trimmed and spaces in a row are one.
+  // A character reference to white space is that character. The white space of an entity's replacement text is a space.
+  EXPECT_EQ( lambdaDefault( "refs" ), "[x ?y <&> [Bien &  Co]]" ); // The '?' is the tab: StrNarrow() shows what isn't printable so.
+  EXPECT_EQ( lambdaDefault( "id" ), "[i]" );
+  EXPECT_EQ( lambdaDefault( "fixed" ), "[f]" );
+  EXPECT_EQ( lambdaDefault( "required" ), "no default" );
+  EXPECT_EQ( lambdaDefault( "implied" ), "no default" );
+  EXPECT_EQ( lambdaDefault( "empty" ), "[]" );
+  EXPECT_EQ( StrNarrow( dtd.PGetAttDef( W( "a" ), W( "tokens" ) )->m_strDefault ), "  one   two? three " ); // As written.
+  // Well-formedness: the entities which a default value refers to - 3.1.
+  auto lambdaError = []( const char * _pszSubset, bool _fStandalone = false ) -> std::string
+  {
+    xml_dtd< TyChar > dtdError;
+    return StrReadDtd< TyChar >( ( std::string( "<!DOCTYPE a [" ) + _pszSubset + "]>" ).c_str(), dtdError, false, _fStandalone );
+  };
+  EXPECT_NE( lambdaError( "<!ENTITY e SYSTEM 'e.xml'><!ATTLIST a x CDATA '&e;'>" ).find( "the default value of attribute [x] refers to an external entity" ), std::string::npos );
+  EXPECT_NE( lambdaError( "<!ENTITY e '<b/>'><!ATTLIST a x CDATA '&e;'>" ).find( "has a '<' in its replacement text" ), std::string::npos );
+  EXPECT_NE( lambdaError( "<!ENTITY e '&#38;f;'><!ENTITY f '&#38;e;'><!ATTLIST a x CDATA '&e;'>" ).find( "contains a reference to itself" ), std::string::npos );
+  EXPECT_EQ( lambdaError( "<!ENTITY e '&#38;#60;'><!ATTLIST a x CDATA '&e;'>" ), "" ); // The character '<' - not markup.
+  // An entity must be declared before the default value which refers to it: well-formedness if the document is standalone.
+  EXPECT_NE( lambdaError( "<!ATTLIST a x CDATA '&later;'><!ENTITY later 'v'>", true ).find( "refers to an entity which is not declared" ), std::string::npos );
+  {
+    xml_dtd< TyChar > dtdInvalid;
+    ASSERT_EQ( StrReadDtd< TyChar >( "<!DOCTYPE a [<!ATTLIST a x CDATA '&later;' y CDATA 'ok'><!ENTITY later 'v'>]>", dtdInvalid ), "" );
+    EXPECT_EQ( dtdInvalid.m_rgstrValidityErrors, ( std::vector< std::string >{ "The default value of attribute [x] refers to an entity which is not declared." } ) );
+    EXPECT_FALSE( dtdInvalid.PGetAttDef( W( "a" ), W( "x" ) )->m_fHasDefaultValue );
+    EXPECT_TRUE( dtdInvalid.PGetAttDef( W( "a" ), W( "y" ) )->m_fHasDefaultValue );
+  }
+}
+
+// The cursor adds the attributes which a tag doesn't have and which have a default value - 3.3.2.
+TYPED_TEST( DtdTest, CursorAttributeDefaults )
+{
+  typedef TypeParam TyChar;
+  {
+    CursorDocument< TyChar > doc(
+      "<!DOCTYPE doc [\n"
+      "<!ENTITY co 'Bien &amp; Co'>\n"
+      "<!ATTLIST doc lang NMTOKEN ' en ' by CDATA '&co;' version CDATA #FIXED '1.0' id ID #REQUIRED note CDATA #IMPLIED>\n"
+      "<!ATTLIST item kind (a|b) 'a'>\n"
+      "<!ATTLIST item extra CDATA 'x'>\n"
+      "]>\n"
+      "<doc id='d1'><item/><item kind='b' other='o'/><none/><item extra=\"e\"></item></doc>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    // What the tag has and then the defaults - in the order in which they are declared. Not those without a default.
+    EXPECT_EQ( doc.StrAttributes(), "id=\"d1\" lang=\"en\" by=\"Bien & Co\" version=\"1.0\"" );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "kind=\"a\" extra=\"x\"" );
+    ASSERT_TRUE( doc.m_cursor.FNextTag() );
+    EXPECT_EQ( doc.StrAttributes(), "kind=\"b\" other=\"o\" extra=\"x\"" ); // What the tag has is what it has.
+    ASSERT_TRUE( doc.m_cursor.FNextTag() );
+    EXPECT_EQ( doc.StrAttributes(), "" ); // An element type for which no attributes are declared.
+    ASSERT_TRUE( doc.m_cursor.FNextTag() );
+    EXPECT_EQ( doc.StrAttributes(), "extra=\"e\" kind=\"a\"" );
+  }
+  // The document read into a tree: the attributes which were added are attributes like the others.
+  {
+    typedef typename CursorDocument< TyChar >::_TyXmlTraits TyXmlTraits;
+    CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ATTLIST doc a CDATA 'default'><!ATTLIST item b CDATA 'B'>]><doc><item c='C'>text</item></doc>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    auto prXmlDoc = xml_document< TyXmlTraits >::PrCreateXmlDocument();
+    EXPECT_NO_THROW( prXmlDoc.first->FromXmlStream( doc.m_cursor, prXmlDoc.second ) );
+  }
+  // Namespaces: an attribute with a default value may declare the namespace of the tag which doesn't have it.
+  {
+    CursorDocument< TyChar > doc(
+      "<!DOCTYPE p:doc [\n"
+      "<!ATTLIST p:doc xmlns:p CDATA #FIXED 'urn:p' p:a CDATA 'pa' plain CDATA 'v'>\n"
+      "<!ATTLIST dflt xmlns CDATA 'urn:default'>\n"
+      "]>\n"
+      "<p:doc><dflt/><p:inner/></p:doc>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "xmlns:p=\"urn:p\" p:a=\"pa\" plain=\"v\"" );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "xmlns=\"urn:default\"" );
+    ASSERT_TRUE( doc.m_cursor.FNextTag() ); // p:inner: the prefix is declared by the default of p:doc.
+    EXPECT_EQ( doc.StrAttributes(), "" );
+  }
+  // The namespace which a default declares is declared for that tag only - as one written in the tag is.
+  {
+    CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ATTLIST p:a xmlns:p CDATA 'urn:p'>]><doc><p:a/><p:b/></doc>" );
+    bool fError = !doc.FOpened();
+    try
+    {
+      fError = fError || !doc.m_cursor.FMoveDown() || !doc.m_cursor.FMoveDown(); // p:a
+      fError = fError || !doc.m_cursor.FNextTag(); // p:b - the prefix is not declared.
+    }
+    catch ( std::exception const & )
+    {
+      fError = true;
+    }
+    EXPECT_TRUE( fError );
+  }
+  // Without the default the prefix of the tag is not declared.
+  {
+    CursorDocument< TyChar > doc( "<!DOCTYPE p:doc [<!ATTLIST p:doc other CDATA 'v'>]><p:doc/>" );
+    bool fError = !doc.FOpened();
+    try
+    {
+      fError = fError || !doc.m_cursor.FMoveDown();
+    }
+    catch ( std::exception const & )
+    {
+      fError = true;
+    }
+    EXPECT_TRUE( fError );
+  }
 }
 
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.
