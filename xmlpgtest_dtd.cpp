@@ -49,6 +49,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "xml_tag.h"
 #include "xml_transport.h"
 #include "xml_writer.h"
+#include "xml_compare.h"
 #include "xml_dtd.h"
 #include "gtest/gtest.h"
 
@@ -657,7 +658,9 @@ TYPED_TEST( DtdTest, ValidityOfDeclarations )
     "Element type [x] is more than once in a mixed content declaration.",
     "[one] is more than once in the enumerated type of an attribute.",
     "[g] is more than once in the enumerated type of an attribute.",
-    "Notation [g] is declared more than once." } ) );
+    "Notation [g] is declared more than once.",
+    // And what is known once all of the declarations have been read:
+    "The attribute [n] of the element type [a] is of type NOTATION and the element type is declared EMPTY." } ) );
   // What was declared first is what there is.
   EXPECT_EQ( dtd.PGetElement( W( "a" ) )->m_eContent, exdcEmpty );
   EXPECT_EQ( StrJoin( dtd.PGetElement( W( "b" ) )->m_rgstrMixedNames ), "x y" );
@@ -775,10 +778,10 @@ TYPED_TEST( DtdTest, ExternalSubsetDeclarations )
 }
 
 // The cursor: a document read with XML traits which support the DTD - xml_traits< transport, true, false >.
-template < class t_TyChar, bool t_kfSupportDTD = true >
+template < class t_TyChar, bool t_kfSupportDTD = true, bool t_kfValidating = false >
 struct CursorDocument
 {
-  typedef xml_traits< _l_transport_fixedmem< t_TyChar >, t_kfSupportDTD, false > _TyXmlTraits;
+  typedef xml_traits< _l_transport_fixedmem< t_TyChar >, t_kfSupportDTD, t_kfValidating > _TyXmlTraits;
   typedef xml_parser< _TyXmlTraits > _TyXmlParser;
   typedef xml_read_cursor< _TyXmlTraits > _TyCursor;
   std::basic_string< t_TyChar > m_strText; // The cursor reads this in place.
@@ -1261,13 +1264,15 @@ TYPED_TEST( DtdTest, CursorTokenizedAttributeValues )
     ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
     EXPECT_TRUE( strWritten == W( strDocument.c_str() ) ) << StrNarrow( strWritten );
   }
-  // And without its document type declaration if the writer is told not to write that.
+  // Without its document type declaration if the writer is told not to write that: then nothing says what the types of
+  //  the attributes are to whoever reads what is written, so the values which the types had normalized are written as
+  //  the values which they are. The others are written as they were.
   {
     CursorDocument< TyChar > doc( strDocument.c_str() );
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     std::basic_string< TyChar > strWritten;
     ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
-    EXPECT_TRUE( strWritten == W( s_szRoot ) ) << StrNarrow( strWritten );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc id='d1' toks=\"a b c\" cd='  x   y ' refs='r1 r2' e='a' empty='' other='  o  '><doc id=\"d2\"/></doc>" );
   }
   // GetStringView() - which isn't const - leaves the string in the value in place of the pieces: then that is what the tag has.
   {
@@ -1358,7 +1363,7 @@ TYPED_TEST( DtdTest, CursorDefaultedAttributesAreKnown )
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     std::basic_string< TyChar > strWritten;
     ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
-    EXPECT_EQ( StrNarrow( strWritten ), "<doc lang=' fr' by=\"Bien &amp; Co\" xmlns:p=\"urn:p\"><p:item kind=\"a\"/><p:item kind=\"b\">text</p:item></doc>" );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc lang='fr' by=\"Bien &amp; Co\" xmlns:p=\"urn:p\"><p:item kind=\"a\"/><p:item kind=\"b\">text</p:item></doc>" );
   }
   // Either may be had whatever is done about the declaration: without it and without them, and with both.
   {
@@ -1366,7 +1371,7 @@ TYPED_TEST( DtdTest, CursorDefaultedAttributesAreKnown )
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     std::basic_string< TyChar > strWritten;
     ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false, 0 ) );
-    EXPECT_EQ( StrNarrow( strWritten ), s_szRoot );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc lang='fr'><p:item/><p:item kind=\"b\">text</p:item></doc>" );
   }
   {
     CursorDocument< TyChar > doc( strDocument.c_str() );
@@ -1634,6 +1639,352 @@ TYPED_TEST( DtdTest, WriterStringValues )
     EXPECT_EQ( StrNarrow( strWritten ), "<doc a='&amp;&lt;&#65;' b=\"&amp;&lt;&#65;\" c='3'>&amp;&lt;&#65;</doc>" );
     EXPECT_ANY_THROW( StrWriteStringValues< TyChar >( "A & B", edrAlwaysReference ) );
     EXPECT_ANY_THROW( StrWriteStringValues< TyChar >( "&nosuch;", edrAlwaysReference ) );
+  }
+}
+
+// Whether two documents are the same document however each is written - FCompareXmlDocuments() of xml_compare.h.
+// The documents are read by cursors of the character types and with or without support for the DTD as given.
+// Returns the difference: empty if they are the same.
+template < class t_TyCharLeft, bool t_kfSupportDTDLeft, class t_TyCharRight, bool t_kfSupportDTDRight >
+std::string StrDifference( const char * _pszLeft, const char * _pszRight, xml_compare_options const & _roptions = xml_compare_options() )
+{
+  CursorDocument< t_TyCharLeft, t_kfSupportDTDLeft > docLeft( _pszLeft );
+  if ( !docLeft.FOpened() )
+    return "left wasn't opened: " + docLeft.m_strError;
+  CursorDocument< t_TyCharRight, t_kfSupportDTDRight > docRight( _pszRight );
+  if ( !docRight.FOpened() )
+    return "right wasn't opened: " + docRight.m_strError;
+  try
+  {
+    std::string strDifference;
+    if ( FCompareXmlDocuments( docLeft.m_cursor, docRight.m_cursor, _roptions, &strDifference ) )
+      return std::string();
+    return strDifference.empty() ? std::string( "different - and nothing says how" ) : strDifference;
+  }
+  catch ( std::exception const & rexc )
+  {
+    return std::string( "exception: " ) + rexc.what();
+  }
+}
+// A string with the tabs and the ends of lines which it has - StrNarrow() has '?' for those.
+template < class t_TyChar >
+std::string StrNarrowExact( std::basic_string< t_TyChar > const & _rstr )
+{
+  std::string str;
+  for ( t_TyChar ch : _rstr )
+    str += ( ch < 0x7f ) ? char( ch ) : '?';
+  return str;
+}
+
+TYPED_TEST( DtdTest, CompareDocuments )
+{
+  typedef TypeParam TyChar;
+  // The other document is read in another character type: what is compared doesn't depend on that.
+  typedef std::conditional_t< sizeof( TyChar ) == sizeof( char8_t ), char32_t, char8_t > TyCharOther;
+  auto Difference = []( const char * _pszLeft, const char * _pszRight, xml_compare_options const & _roptions = xml_compare_options() )
+  {
+    return StrDifference< TyChar, false, TyCharOther, false >( _pszLeft, _pszRight, _roptions );
+  };
+  // The same however they are written: the order of the attributes and their quotes, references and CDATA sections,
+  //  an empty element, the XML declaration and the white space outside of the document's tag.
+  EXPECT_EQ( Difference( "<a x='1' y=\"2\">t<b/></a>", "<?xml version=\"1.0\"?>\n<a y='2' x=\"1\">t<b></b></a>\n" ), "" );
+  EXPECT_EQ( Difference( "<a v='x&amp;y&#65;&lt;'>x&amp;y&#65;<![CDATA[<]]>z</a>", "<a v='x&#38;yA&#60;'>x&#38;yA&lt;<![CDATA[z]]></a>" ), "" );
+  EXPECT_EQ( Difference( "<a v='p\tq\r\nr'/>", "<a v='p q r'/>" ), "" ); // The value of an attribute is normalized.
+  // What is different - and where and how is said.
+  EXPECT_EQ( Difference( "<a><b x='1'/></a>", "<a><b x='2'/></a>" ), "/a/b: the value of the attribute [x] is [1] in left and [2] in right" );
+  EXPECT_EQ( Difference( "<a><b x='1' y='2'/></a>", "<a><b y='2'/></a>" ), "/a/b: left has the attribute [x] and right doesn't" );
+  EXPECT_EQ( Difference( "<a><b y='2'/></a>", "<a><b x='1' y='2'/></a>" ), "/a/b: right has the attribute [x] and left doesn't" );
+  EXPECT_EQ( Difference( "<a><b y='2'/></a>", "<a><b y='2' z='3'/></a>" ), "/a/b: right has the attribute [z] and left doesn't" );
+  EXPECT_EQ( Difference( "<a><b/></a>", "<a><c/></a>" ), "/a: the tag is <b> in left and <c> in right" );
+  EXPECT_EQ( Difference( "<a><b/><c/></a>", "<a><b/></a>" ), "/a: left has a start tag <c> where right has an end tag" );
+  EXPECT_EQ( Difference( "<a><b/></a>", "<a><b><c/></b></a>" ), "/a/b: left has an end tag where right has a start tag <c>" );
+  EXPECT_EQ( Difference( "<a>one<b/>two</a>", "<a>one<b/>too</a>" ), "/a: the character data is [two] in left and [too] in right" );
+  EXPECT_EQ( Difference( "<a>one<b/></a>", "<a><b/>one</a>" ), "/a: left has character data [one] where right has a start tag <b>" );
+  EXPECT_EQ( Difference( "<a/>", "<b/>" ), "/: the tag is <a> in left and <b> in right" );
+  // The order of the attributes if it is to be compared.
+  {
+    xml_compare_options options;
+    options.m_fCompareAttributeOrder = true;
+    EXPECT_EQ( Difference( "<a x='1' y='2'/>", "<a x='1' y='2'/>", options ), "" );
+    EXPECT_EQ( Difference( "<a x='1' y='2'/>", "<a y='2' x='1'/>", options ), "/a: attribute 1 is [x] in left and [y] in right" );
+  }
+  // Comments and processing instructions - or not. Without them the character data on either side of one is one piece.
+  EXPECT_EQ( Difference( "<!--c--><a>x<!--d-->y<?pi z?></a>", "<!--c--><a>x<!--d-->y<?pi z?></a>" ), "" );
+  EXPECT_EQ( Difference( "<a>x<!--d-->y</a>", "<a>xy</a>" ), "/a: the character data is [x] in left and [xy] in right" );
+  EXPECT_EQ( Difference( "<a><!--d-->y</a>", "<a>y</a>" ), "/a: left has a comment [d] where right has character data [y]" );
+  EXPECT_EQ( Difference( "<a><!--d--></a>", "<a><!--e--></a>" ), "/a: the comment is [d] in left and [e] in right" );
+  EXPECT_EQ( Difference( "<a><?pi z?></a>", "<a><?pi y?></a>" ), "/a: the processing instruction is [pi z] in left and [pi y] in right" );
+  {
+    xml_compare_options options;
+    options.m_fCompareComments = false;
+    options.m_fCompareProcessingInstructions = false;
+    EXPECT_EQ( Difference( "<!--c--><a>x<!--d-->y<?pi z?></a><?after?>", "<a>xy</a>", options ), "" );
+    EXPECT_EQ( Difference( "<a>x<!--d-->y</a>", "<a>xz</a>", options ), "/a: the character data is [xy] in left and [xz] in right" );
+  }
+  // White space is character data - unless character data which is all white space is to be ignored.
+  EXPECT_NE( Difference( "<a> <b/>\n</a>", "<a><b/></a>" ), "" );
+  {
+    xml_compare_options options;
+    options.m_fIgnoreWhitespaceText = true;
+    EXPECT_EQ( Difference( "<a> <b/>\n</a>", "<a><b/></a>", options ), "" );
+    EXPECT_NE( Difference( "<a> x <b/></a>", "<a>x<b/></a>", options ), "" );
+  }
+  // Namespaces: names are the same if their namespaces are and their local parts are - and their prefixes, unless those
+  //  are not to be compared. Then the declarations of the namespaces must not be either.
+  EXPECT_EQ( Difference( "<p:a xmlns:p='urn:u' p:x='1'><p:b/><c xmlns='urn:d'/></p:a>", "<p:a p:x='1' xmlns:p='urn:u'><p:b/><c xmlns='urn:d'/></p:a>" ), "" );
+  EXPECT_NE( Difference( "<p:a xmlns:p='urn:u'><p:b/></p:a>", "<q:a xmlns:q='urn:u'><q:b/></q:a>" ), "" );
+  EXPECT_NE( Difference( "<p:a xmlns:p='urn:u'/>", "<p:a xmlns:p='urn:v'/>" ), "" );
+  {
+    xml_compare_options options;
+    options.m_fComparePrefixes = false;
+    options.m_fCompareNamespaceDeclarations = false;
+    EXPECT_EQ( Difference( "<p:a xmlns:p='urn:u' p:x='1'><p:b/></p:a>", "<q:a xmlns:q='urn:u' q:x='1'><q:b/></q:a>", options ), "" );
+    EXPECT_EQ( Difference( "<p:a xmlns:p='urn:u'><p:b/></p:a>", "<a xmlns='urn:u'><b/></a>", options ), "" );
+    EXPECT_NE( Difference( "<p:a xmlns:p='urn:u'/>", "<p:a xmlns:p='urn:v'/>", options ), "" ); // Another namespace is another name.
+  }
+
+  // A document which has a DTD - which gives its tags attributes, declares the types of some of their attributes and
+  //  declares entities - and the same document written without the DTD: the attributes are in the tags, the values are
+  //  as the types made them and the references to the entities are the text of the entities. Read without any DTD the
+  //  second is the same document as the first read with its DTD.
+  static const char s_szDoctype[] =
+    "<!DOCTYPE doc [\n"
+    "<!ENTITY co 'Bien &amp; Co'>\n"
+    "<!ATTLIST doc by CDATA '&co;' lang NMTOKEN ' en ' ids IDREFS #IMPLIED title CDATA #IMPLIED xmlns:p CDATA #FIXED 'urn:p'>\n"
+    "<!ATTLIST p:item kind (a|b) \"a\">\n"
+    "]>\n";
+  static const char s_szRoot[] =
+    "<doc ids=' x1   x2 ' title='About &co; &lt;here&gt;'>By &co;, <![CDATA[<raw>]]>&#65;<p:item/><!-- c -->\n"
+    "<p:item kind=\" b\">text</p:item><?pi data?></doc>\n";
+  const std::string strWithDtd = std::string( s_szDoctype ) + s_szRoot;
+  std::string strWithoutDtd;
+  {
+    CursorDocument< TyChar > doc( strWithDtd.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
+    strWithoutDtd = StrNarrowExact( strWritten );
+  }
+  EXPECT_EQ( strWithoutDtd,
+    "\n<doc ids='x1 x2' title='About Bien &amp; Co &lt;here&gt;' by=\"Bien &amp; Co\" lang=\"en\" xmlns:p=\"urn:p\">By Bien &amp; Co, <![CDATA[<raw>]]>&#65;<p:item kind=\"a\"/><!-- c -->\n"
+    "<p:item kind=\"b\">text</p:item><?pi data?></doc>\n" );
+  EXPECT_EQ( ( StrDifference< TyChar, true, TyCharOther, false >( strWithDtd.c_str(), strWithoutDtd.c_str() ) ), "" );
+  EXPECT_EQ( ( StrDifference< TyCharOther, false, TyChar, true >( strWithoutDtd.c_str(), strWithDtd.c_str() ) ), "" );
+  // And written with the DTD it is the document as it was - which is the same document of course.
+  {
+    CursorDocument< TyChar > doc( strWithDtd.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_EQ( StrNarrowExact( strWritten ), strWithDtd );
+    EXPECT_EQ( ( StrDifference< TyChar, true, TyCharOther, true >( strWithDtd.c_str(), StrNarrowExact( strWritten ).c_str() ) ), "" );
+  }
+  // Read without what the DTD does it is another document: the document without its declaration isn't well formed -
+  //  it refers to an entity which nothing declares - and without that the tags don't have the attributes.
+  EXPECT_NE( ( StrDifference< TyChar, true, TyCharOther, false >( strWithDtd.c_str(), s_szRoot ) ), "" );
+  EXPECT_EQ( ( StrDifference< TyChar, true, TyCharOther, false >( "<!DOCTYPE doc [<!ATTLIST doc a CDATA 'v'>]><doc/>", "<doc/>" ) ),
+             "/doc: left has the attribute [a] and right doesn't" );
+  EXPECT_EQ( ( StrDifference< TyChar, true, TyCharOther, false >( "<!DOCTYPE doc [<!ATTLIST doc a CDATA 'v'>]><doc/>", "<doc a='v'/>" ) ), "" );
+  // The declaration itself is compared - as text - only if that is asked for.
+  {
+    xml_compare_options options;
+    options.m_fCompareDoctypeDecl = true;
+    EXPECT_EQ( ( StrDifference< TyChar, true, TyCharOther, true >( strWithDtd.c_str(), strWithDtd.c_str(), options ) ), "" );
+    EXPECT_NE( ( StrDifference< TyChar, true, TyCharOther, false >( strWithDtd.c_str(), strWithoutDtd.c_str(), options ) ), "" );
+  }
+}
+
+// Validation: a document read with XML traits which are validating - xml_traits< transport, true, true > - is checked
+//  against its DTD as it is read: see xml_validate.h.
+// Returns what is not valid about the document - each violation on a line, those of the declarations first - or that
+//  it couldn't be read.
+// _fMoveThroughIt: the cursor is moved to every tag of the document. Otherwise it is moved to the document's element
+//  and then beyond it - which reads all that is within it as well.
+template < class t_TyChar >
+std::string StrValidate( const char * _pszDocument, bool _fMoveThroughIt = false )
+{
+  CursorDocument< t_TyChar, true, true > doc( _pszDocument );
+  if ( !doc.FOpened() )
+    return "not opened: " + doc.m_strError;
+  try
+  {
+    if ( _fMoveThroughIt )
+    {
+      for ( size_t nDepth = 0; ; )
+      {
+        if ( doc.m_cursor.FMoveDown() )
+        {
+          ++nDepth;
+          continue;
+        }
+        if ( !nDepth )
+          break;
+        if ( !doc.m_cursor.FNextTag() )
+          --nDepth;
+      }
+    }
+    else
+    {
+      if ( doc.m_cursor.FMoveDown() )
+        (void)doc.m_cursor.FNextTag();
+    }
+  }
+  catch ( std::exception const & rexc )
+  {
+    return std::string( "exception: " ) + rexc.what();
+  }
+  std::string strErrors;
+  if ( doc.m_cursor.FHasDtd() )
+    for ( std::string const & rstrError : doc.m_cursor.GetDtd().m_rgstrValidityErrors )
+      strErrors += rstrError + "\n";
+  for ( std::string const & rstrError : doc.m_cursor.RgValidityErrors() )
+    strErrors += rstrError + "\n";
+  if ( doc.m_cursor.FIsValid() != strErrors.empty() )
+    strErrors += "FIsValid() doesn't agree with the violations\n";
+  return strErrors;
+}
+
+TYPED_TEST( DtdTest, Validation )
+{
+  typedef TypeParam TyChar;
+  static const char s_szDoctype[] =
+    "<!DOCTYPE doc [\n"
+    "<!ELEMENT doc (head, (item | group)*, tail?)>\n"
+    "<!ELEMENT head (#PCDATA)>\n"
+    "<!ELEMENT item EMPTY>\n"
+    "<!ELEMENT group (item+)>\n"
+    "<!ELEMENT tail (#PCDATA | b)*>\n"
+    "<!ELEMENT b ANY>\n"
+    "<!ATTLIST item id ID #REQUIRED ref IDREF #IMPLIED kind (a|b) 'a' refs IDREFS #IMPLIED tok NMTOKEN #IMPLIED toks NMTOKENS #IMPLIED fixed CDATA #FIXED 'f'>\n"
+    "<!NOTATION gif SYSTEM 'gif'>\n"
+    "<!ENTITY pic SYSTEM 'pic.gif' NDATA gif>\n"
+    "<!ENTITY text 'some text'>\n"
+    "<!ENTITY ws ' '>\n"
+    "<!ATTLIST b src ENTITY #IMPLIED srcs ENTITIES #IMPLIED note NOTATION (gif) #IMPLIED>\n"
+    "]>\n";
+  // Each of these is the document's element and what is within it, for the declarations above. Returns the violations.
+  auto Validate = []( const char * _pszRoot, bool _fMoveThroughIt = false )
+  {
+    return StrValidate< TyChar >( ( std::string( s_szDoctype ) + _pszRoot ).c_str(), _fMoveThroughIt );
+  };
+  // A valid document.
+  static const char s_szValid[] =
+    "<doc><head>title &text;</head>\n"
+    " <item id='i1'/><!-- c --><?pi?>&ws;<group><item id='i2' ref='i1' refs=' i1  i3 ' kind=' b' tok='1.5' toks='a 2 -c' fixed='f'/></group><item id=\"i3\"/>\n"
+    " <tail>text <b src='pic' srcs='pic pic' note='gif'>any <item id='i4'/><head/> thing</b> more <![CDATA[<x>]]>&#65;</tail></doc>\n";
+  EXPECT_EQ( Validate( s_szValid ), "" );
+  EXPECT_EQ( Validate( s_szValid, true ), "" );
+  EXPECT_EQ( Validate( "<doc><head/></doc>" ), "" ); // The least which the content model allows.
+  EXPECT_EQ( Validate( "<doc><head></head><group><item id='a'/><item id='b'></item></group><tail/></doc>" ), "" );
+
+  // VC: Root Element Type.
+  EXPECT_EQ( Validate( "<head>text</head>" ), "The document's element is <head> and its document type declaration is for <doc>.\n" );
+  // VC: Element Valid - the element type is declared. Nothing is known of what may be within such an element.
+  EXPECT_EQ( Validate( "<doc><head/><tail><nosuch><item id='a'/></nosuch></tail></doc>" ),
+    "The element <nosuch> may not be within the element <tail>: it is not among the element types of its mixed content.\n"
+    "The element type <nosuch> is not declared.\n" );
+  // Element content: the elements in the order of the content model.
+  EXPECT_EQ( Validate( "<doc><item id='a'/></doc>" ), "The element <item> may not be here within the element <doc>: its content model has <head>.\n" );
+  EXPECT_EQ( Validate( "<doc></doc>" ), "The content of the element <doc> ends where its content model has more: <head>.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><tail/><item id='a'/></doc>" ), "The element <item> may not be here within the element <doc>: its content model has the end of the element.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><head/></doc>" ), "The element <head> may not be here within the element <doc>: its content model has <group>, <item>, <tail> or the end of the element.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><group/></doc>" ), "The content of the element <group> ends where its content model has more: <item>.\n" );
+  // Among the elements of element content: white space, comments and processing instructions - not character data,
+  //  nor a CDATA section or a reference to a character even if what they have is white space.
+  EXPECT_EQ( Validate( "<doc><head/>text</doc>" ), "The element <doc> is declared to have element content and has character data.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><![CDATA[ ]]></doc>" ), "The element <doc> is declared to have element content and has character data.\n" );
+  EXPECT_EQ( Validate( "<doc><head/>&#32;</doc>" ), "The element <doc> is declared to have element content and has character data.\n" );
+  EXPECT_EQ( Validate( "<doc><head/>&text;</doc>" ), "The element <doc> is declared to have element content and has character data.\n" );
+  // EMPTY: nothing at all.
+  EXPECT_EQ( Validate( "<doc><head/><item id='a'> </item></doc>" ), "The element <item> is declared EMPTY and has white space.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a'>x</item></doc>" ), "The element <item> is declared EMPTY and has character data.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a'><!-- c --></item></doc>" ), "The element <item> is declared EMPTY and has a comment or a processing instruction.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a'><head/></item></doc>" ), "The element <item> is declared EMPTY and has the element <head>.\n" );
+  // Mixed content: character data and the element types which are listed - each one which isn't is said.
+  EXPECT_EQ( Validate( "<doc><head>a<b/></head></doc>" ), "The element <b> may not be within the element <head>: it is not among the element types of its mixed content.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><tail><item id='a'/>x<head/></tail></doc>" ),
+    "The element <item> may not be within the element <tail>: it is not among the element types of its mixed content.\n"
+    "The element <head> may not be within the element <tail>: it is not among the element types of its mixed content.\n" );
+
+  // VC: Attribute Value Type - the attribute is declared.
+  EXPECT_EQ( Validate( "<doc other='x'><head/></doc>" ), "The attribute [other] of the element <doc> is not declared.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' xmlns:p='urn:p'/></doc>" ), "The attribute [xmlns:p] of the element <item> is not declared.\n" );
+  // VC: Required Attribute.
+  EXPECT_EQ( Validate( "<doc><head/><item/></doc>" ), "The attribute [id] of the element <item> is declared #REQUIRED and the tag doesn't have it.\n" );
+  // VC: ID.
+  EXPECT_EQ( Validate( "<doc><head/><item id='1a'/></doc>" ), "The value [1a] of the attribute [id] of the element <item> is not a Name.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a b'/></doc>" ), "The value [a b] of the attribute [id] of the element <item> is not a Name.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a'/><item id=' a '/></doc>" ), "The ID [a] - of the attribute [id] of an element <item> - is the ID of another element as well.\n" );
+  // VC: IDREF - an ID of the document, which may come after the reference.
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' ref='b'/><item id='b' refs='a b'/></doc>" ), "" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' ref='b'/></doc>" ), "The IDREF [b] is not the ID of any element of the document.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' refs='a c  d'/></doc>" ),
+    "The IDREF [c] is not the ID of any element of the document.\nThe IDREF [d] is not the ID of any element of the document.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' refs=''/></doc>" ), "The value [] of the attribute [refs] of the element <item> is not Names.\n" );
+  // VC: Enumeration.
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' kind='c'/></doc>" ), "The value [c] of the attribute [kind] of the element <item> is not one of the values declared for it.\n" );
+  // VC: Name Token.
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' tok='a b'/></doc>" ), "The value [a b] of the attribute [tok] of the element <item> is not a name token.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' toks='a b!'/></doc>" ), "The value [a b!] of the attribute [toks] of the element <item> is not name tokens.\n" );
+  // VC: Fixed Attribute Default.
+  EXPECT_EQ( Validate( "<doc><head/><item id='a' fixed='g'/></doc>" ), "The attribute [fixed] of the element <item> is declared #FIXED as [f] and its value is [g].\n" );
+  // VC: Entity Name.
+  EXPECT_EQ( Validate( "<doc><head/><tail><b src='text'/></tail></doc>" ), "The value [text] of the attribute [src] of the element <b> is not the name of an unparsed entity which is declared.\n" );
+  EXPECT_EQ( Validate( "<doc><head/><tail><b srcs='pic nosuch'/></tail></doc>" ), "The value [nosuch] of the attribute [srcs] of the element <b> is not the name of an unparsed entity which is declared.\n" );
+  // VC: Notation Attributes.
+  EXPECT_EQ( Validate( "<doc><head/><tail><b note='jpeg'/></tail></doc>" ), "The value [jpeg] of the attribute [note] of the element <b> is not one of the notations declared for it.\n" );
+
+  // What the cursor passes over is checked as what it stops at is: the same violations either way.
+  static const char s_szSeveral[] = "<doc><head/><group><item/><item id='x' kind='z'/></group><tail><b><nosuch/></b></tail><item id='x'/></doc>";
+  EXPECT_EQ( Validate( s_szSeveral ),
+    "The attribute [id] of the element <item> is declared #REQUIRED and the tag doesn't have it.\n"
+    "The value [z] of the attribute [kind] of the element <item> is not one of the values declared for it.\n"
+    "The element type <nosuch> is not declared.\n"
+    "The element <item> may not be here within the element <doc>: its content model has the end of the element.\n"
+    "The ID [x] - of the attribute [id] of an element <item> - is the ID of another element as well.\n" );
+  EXPECT_EQ( Validate( s_szSeveral, true ), Validate( s_szSeveral ) );
+
+  // Content models: what may follow what - and a model which doesn't say which way it is going until later.
+  {
+    static const char s_szModels[] =
+      "<!DOCTYPE x [\n"
+      "<!ELEMENT x (((a, b) | (a, c)), (d?, e*)+, (f | (g, h))?)>\n"
+      "<!ELEMENT a EMPTY><!ELEMENT b EMPTY><!ELEMENT c EMPTY><!ELEMENT d EMPTY><!ELEMENT e EMPTY><!ELEMENT f EMPTY><!ELEMENT g EMPTY><!ELEMENT h EMPTY>\n"
+      "]>\n";
+    auto ValidateModel = []( const char * _pszRoot )
+    {
+      return StrValidate< TyChar >( ( std::string( s_szModels ) + _pszRoot ).c_str() );
+    };
+    EXPECT_EQ( ValidateModel( "<x><a/><b/></x>" ), "" );
+    EXPECT_EQ( ValidateModel( "<x><a/><c/></x>" ), "" );
+    EXPECT_EQ( ValidateModel( "<x><a/><c/><d/><e/><e/><d/><d/><e/><g/><h/></x>" ), "" );
+    EXPECT_EQ( ValidateModel( "<x><a/><b/><f/></x>" ), "" );
+    EXPECT_EQ( ValidateModel( "<x><a/></x>" ), "The content of the element <x> ends where its content model has more: <b>, <c>.\n" );
+    EXPECT_EQ( ValidateModel( "<x><a/><d/></x>" ), "The element <d> may not be here within the element <x>: its content model has <b>, <c>.\n" );
+    EXPECT_EQ( ValidateModel( "<x><a/><b/><g/></x>" ), "The content of the element <x> ends where its content model has more: <h>.\n" );
+    EXPECT_EQ( ValidateModel( "<x><a/><b/><f/><f/></x>" ), "The element <f> may not be here within the element <x>: its content model has the end of the element.\n" );
+  }
+  // A document without a document type declaration has nothing which it is valid against.
+  EXPECT_EQ( StrValidate< TyChar >( "<doc><a/></doc>" ), "The document has no document type declaration: there is nothing which it is valid against.\n" );
+  // The declarations themselves may not be valid: then the document isn't.
+  EXPECT_NE( StrValidate< TyChar >( "<!DOCTYPE doc [<!ELEMENT doc EMPTY><!ELEMENT doc EMPTY>]><doc/>" ), "" );
+  // A violation is thrown if that is asked for.
+  {
+    CursorDocument< TyChar, true, true > doc( ( std::string( s_szDoctype ) + "<doc><head/><item/></doc>" ).c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    doc.m_cursor.SetThrowOnValidityError();
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_ANY_THROW( doc.m_cursor.FNextTag() );
+  }
+  // And a document which is valid is read by a validating cursor as by any other: it is the same document.
+  {
+    const std::string strDocument = std::string( s_szDoctype ) + s_szValid;
+    CursorDocument< TyChar, true, true > docValidating( strDocument.c_str() );
+    CursorDocument< TyChar, true, false > docNot( strDocument.c_str() );
+    ASSERT_TRUE( docValidating.FOpened() && docNot.FOpened() );
+    std::string strDifference;
+    EXPECT_TRUE( FCompareXmlDocuments( docValidating.m_cursor, docNot.m_cursor, xml_compare_options(), &strDifference ) ) << strDifference;
+    EXPECT_TRUE( docValidating.m_cursor.FIsValid() );
   }
 }
 
@@ -1909,6 +2260,104 @@ TEST( DtdConformance, ExternalSubsets )
     nRejected += optResult->m_fAccepted ? 0 : 1;
   }
   EXPECT_GE( nRejected, 25u );
+}
+
+// The verdict of a validating cursor on a document of the suite.
+enum EConformanceValidity
+{
+  ecvNotJudged, // The document can't be judged: see ConformanceValidate().
+  ecvValid,
+  ecvNotValid
+};
+// Read a document of the suite with a validating cursor - in UTF-8 - and say whether it is valid.
+// A document is not judged if what it is depends on what we don't read: it has an external subset or refers to a
+//  parameter entity which isn't read ( its declarations are then not all known ), it has no document type declaration,
+//  it isn't in UTF-8 - or it can't be read at all, which is for what isn't supported yet since all of these documents
+//  are well formed.
+// _rstrWhy: the first violation, or why it wasn't judged.
+EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string & _rstrWhy )
+{
+  _rstrWhy.clear();
+  std::ifstream ifs( _rpath, std::ios::binary );
+  std::stringstream ss;
+  ss << ifs.rdbuf();
+  const std::string strBytes = ss.str();
+  if ( strBytes.empty() || ( std::string::npos != strBytes.find( '\0' ) ) )
+  {
+    _rstrWhy = "not UTF-8";
+    return ecvNotJudged;
+  }
+  CursorDocument< char8_t, true, true > doc( strBytes.c_str() );
+  if ( !doc.FOpened() )
+  {
+    _rstrWhy = "not opened: " + doc.m_strError;
+    return ecvNotJudged;
+  }
+  try
+  {
+    if ( doc.m_cursor.FMoveDown() )
+      (void)doc.m_cursor.FNextTag();
+  }
+  catch ( std::exception const & rexc )
+  {
+    _rstrWhy = std::string( "not read: " ) + rexc.what();
+    return ecvNotJudged;
+  }
+  if ( !doc.m_cursor.FHasDtd() )
+  {
+    _rstrWhy = "no document type declaration";
+    return ecvNotJudged;
+  }
+  xml_dtd< char8_t > const & rdtd = doc.m_cursor.GetDtd();
+  if ( rdtd.m_optExternalId.has_value() || rdtd.m_fStoppedProcessingDeclarations )
+  {
+    _rstrWhy = "declarations which are not read";
+    return ecvNotJudged;
+  }
+  if ( doc.m_cursor.FValidationIncomplete() )
+  {
+    _rstrWhy = "a reference to an entity whose text is not read";
+    return ecvNotJudged;
+  }
+  if ( doc.m_cursor.FIsValid() )
+    return ecvValid;
+  _rstrWhy = !rdtd.m_rgstrValidityErrors.empty() ? rdtd.m_rgstrValidityErrors.front() : doc.m_cursor.RgValidityErrors().front();
+  return ecvNotValid;
+}
+
+// The documents which the suite says are valid and those which it says are not valid - all of them are well formed -
+//  are read by a validating cursor: it must find the first valid and the second not.
+// Not all of them can be judged yet - see ConformanceValidate(): most of those which can't have an external subset.
+TEST( DtdConformance, ValidAndInvalidDocuments )
+{
+  size_t nValidJudged = 0, nInvalidJudged = 0, nNotJudged = 0;
+  for ( const char * pszDirectory : { "xmltest/valid/sa", "ibm/valid", "sun/valid", "xmltest/invalid", "ibm/invalid", "sun/invalid" } )
+  {
+    const bool kfValid = ( std::string::npos == std::string( pszDirectory ).find( "invalid" ) );
+    for ( std::string const & rstrFile : RgConformanceFiles( pszDirectory, ".xml" ) )
+    {
+      if ( std::string::npos != rstrFile.find( "/out/" ) )
+        continue; // The canonical forms of the documents - not documents of the tests.
+      std::string strWhy;
+      const EConformanceValidity ecv = ConformanceValidate( PathConformanceFile( rstrFile ), strWhy );
+      if ( ecvNotJudged == ecv )
+      {
+        ++nNotJudged;
+        continue;
+      }
+      ( kfValid ? nValidJudged : nInvalidJudged ) += 1;
+      if ( kfValid )
+        EXPECT_EQ( ecv, ecvValid ) << rstrFile << " is valid and was found not to be: " << strWhy;
+      else
+        EXPECT_EQ( ecv, ecvNotValid ) << rstrFile << " is not valid and nothing was found wrong with it.";
+    }
+  }
+  if ( !nValidJudged && !nInvalidJudged && !nNotJudged )
+    return; // The suite is not here.
+  // Those which are judged - so that it is noticed if they no longer are. 229, 69 and 127 when this was written.
+  EXPECT_GE( nValidJudged, 220u );
+  EXPECT_GE( nInvalidJudged, 65u );
+  EXPECT_LE( nNotJudged, 130u );
 }
 #endif //XMLP_XMLCONF_DIR
 
