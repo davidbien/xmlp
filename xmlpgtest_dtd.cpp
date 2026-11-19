@@ -4,7 +4,8 @@
 // The text of a document type declaration, an external subset or the replacement text of a parameter entity is parsed
 //  in UTF-8, UTF-16 and UTF-32 - the one parser with each of the three lexical analyzers - into the parse tree: that
 //  tests the tokens and the grammar. And it is read into an xml_dtd by xml_dtd_parser ( xml_dtd.h ): that tests what is
-//  made of the declarations.
+//  made of the declarations. And a document with a document type declaration is read by the cursor ( xml_cursor.h ) when
+//  the XML traits support the DTD: the cursor then has the xml_dtd and the entities of the document are those declared.
 // And the W3C XML Conformance Test Suite ( unittests/xmlconf ): the document type declarations of its documents and its
 //  external subsets are parsed - see DtdConformance below for what is expected of them.
 // LEXOBJ_STRICT is defined so that the lexical analyzer verifies that no trigger data is left behind by a token or by a
@@ -43,6 +44,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include <sstream>
 #include "syslogmgr.inl"
 #include "_compat.inl"
+#include "xml_inc.h"
 #include "xml_inc.h"
 #include "xml_dtd.h"
 #include "gtest/gtest.h"
@@ -767,6 +769,152 @@ TYPED_TEST( DtdTest, ExternalSubsetDeclarations )
   xml_dtd< TyChar > dtdInvalid;
   EXPECT_EQ( StrReadDtd< TyChar >( "<!ENTITY e 'a %p; b'>", dtdInvalid, true ), "" );
   EXPECT_EQ( dtdInvalid.m_rgstrValidityErrors.size(), 1u );
+}
+
+// The cursor: a document read with XML traits which support the DTD - xml_traits< transport, true, false >.
+template < class t_TyChar, bool t_kfSupportDTD = true >
+struct CursorDocument
+{
+  typedef xml_traits< _l_transport_fixedmem< t_TyChar >, t_kfSupportDTD, false > _TyXmlTraits;
+  typedef xml_parser< _TyXmlTraits > _TyXmlParser;
+  typedef xml_read_cursor< _TyXmlTraits > _TyCursor;
+  std::basic_string< t_TyChar > m_strText; // The cursor reads this in place.
+  _TyXmlParser m_xmlParser;
+  _TyCursor m_cursor;
+  std::string m_strError; // If the document couldn't be opened.
+
+  explicit CursorDocument( const char * _pszText )
+  {
+    if ( sizeof( t_TyChar ) > 1 )
+      m_strText += t_TyChar( 0xFEFF ); // The byte order mark: how the encoding of what is in memory is known.
+    m_strText.append( _pszText, _pszText + strlen( _pszText ) );
+    try
+    {
+      m_cursor = m_xmlParser.OpenMemory( m_strText.data(), m_strText.length() * sizeof( t_TyChar ) );
+    }
+    catch ( std::exception const & rexc )
+    {
+      m_strError = rexc.what();
+      if ( m_strError.empty() )
+        m_strError = "error";
+    }
+  }
+  bool FOpened() const
+  {
+    return m_strError.empty();
+  }
+  // The character data of the current tag - up to its first child - as the cursor has it: with the references replaced.
+  std::basic_string< t_TyChar > StrContent()
+  {
+    std::basic_string< t_TyChar > str;
+    m_cursor.GetContextCur().GetContentString( str );
+    return str;
+  }
+};
+
+TYPED_TEST( DtdTest, Cursor )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  static const char s_szDocument[] =
+    "<?xml version=\"1.0\"?>\n"
+    "<!-- before -->\n"
+    "<!DOCTYPE doc SYSTEM 'doc.dtd' [\n"
+    "<!ELEMENT doc (#PCDATA|item)*>\n"
+    "<!ELEMENT item EMPTY>\n"
+    "<!ATTLIST doc title CDATA #IMPLIED>\n"
+    "<!ENTITY company \"Bien &amp; Co\">\n"
+    "<!ENTITY nested 'at &company; (&#169;) &#38;#60;tag>'>\n"
+    "<!ENTITY markup '<b>bold</b>'>\n"
+    "<!ENTITY lt 'redeclared'>\n"
+    "<!ENTITY external SYSTEM 'external.xml'>\n"
+    "]>\n"
+    "<?pi after?>\n"
+    "<doc title=\"about &company;\">Made &nested;.<item/> &lt;</doc>\n";
+  CursorDocument< TyChar > doc( s_szDocument );
+  ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+  // The document type declaration has been read: it is in the prolog and the cursor is at the first tag.
+  ASSERT_TRUE( doc.m_cursor.FHasDtd() );
+  xml_dtd< TyChar > const & rdtd = doc.m_cursor.GetDtd();
+  EXPECT_EQ( StrNarrow( rdtd.m_strRootName ), "doc" );
+  EXPECT_EQ( StrNarrow( *rdtd.m_optExternalId->m_optstrSystem ), "doc.dtd" );
+  EXPECT_EQ( rdtd.m_mapElements.size(), 2u );
+  EXPECT_TRUE( !!rdtd.PGetAttDef( W( "doc" ), W( "title" ) ) );
+  EXPECT_EQ( rdtd.m_mapGeneralEntities.size(), 5u );
+  // The entities of the document: those which are text alone - and the predefined ones are what they were.
+  auto const & rmapEntities = doc.m_xmlParser.GetUserObj().GetEntityMap();
+  EXPECT_EQ( rmapEntities.size(), 7u ); // The five predefined, company and nested.
+  ASSERT_TRUE( rmapEntities.end() != rmapEntities.find( W( "company" ) ) );
+  EXPECT_EQ( StrNarrow( rmapEntities.find( W( "company" ) )->second ), "Bien & Co" );
+  ASSERT_TRUE( rmapEntities.end() != rmapEntities.find( W( "nested" ) ) );
+  EXPECT_TRUE( rmapEntities.end() == rmapEntities.find( W( "markup" ) ) );
+  EXPECT_TRUE( rmapEntities.end() == rmapEntities.find( W( "external" ) ) );
+  EXPECT_EQ( StrNarrow( rmapEntities.find( W( "lt" ) )->second ), "<" );
+  {
+    // "&#38;#60;" in the literal is "&#60;" in the replacement text and that is the character '<' - not markup - where it is referenced.
+    std::basic_string< TyChar > strNested = W( "at Bien & Co (" );
+    const char32_t chCopyright = 0xA9;
+    std::basic_string< TyChar > strCopyright;
+    ConvertString( strCopyright, &chCopyright, 1 );
+    strNested += strCopyright + W( ") <tag>" );
+    EXPECT_TRUE( rmapEntities.find( W( "nested" ) )->second == strNested );
+    // The document: the references in its character data are replaced.
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_TRUE( doc.StrContent() == W( "Made " ) + strNested + W( "." ) );
+  }
+  // And those in the values of its attributes.
+  {
+    auto & rltokTag = doc.m_cursor.GetTagCur().GetLexToken();
+    std::basic_string_view< TyChar > svTitle;
+    rltokTag.GetStringView( svTitle, rltokTag.GetValue()[ vknAttributesIdx ][ 0 ][ vknAttr_ValueIdx ] );
+    EXPECT_EQ( StrNarrow( svTitle ), "about Bien & Co" );
+  }
+}
+
+// The document type declaration and the cursor: where it may be and what is an error.
+TYPED_TEST( DtdTest, CursorDoctype )
+{
+  typedef TypeParam TyChar;
+  // A document without a document type declaration is read as it always was.
+  {
+    CursorDocument< TyChar > doc( "<?xml version='1.0'?><!-- c --><a>text &amp; more</a>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_FALSE( doc.m_cursor.FHasDtd() );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( StrNarrow( doc.StrContent() ), "text & more" );
+  }
+  // Without an XML declaration, without anything before it and without an internal subset.
+  {
+    CursorDocument< TyChar > doc( "<!DOCTYPE a><a/>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FHasDtd() );
+    EXPECT_EQ( StrNarrow( doc.m_cursor.GetDtd().m_strRootName ), "a" );
+    EXPECT_FALSE( doc.m_cursor.GetDtd().m_fHasInternalSubset );
+  }
+  // An entity which has markup is not one of the document's entities yet: a reference to it is to an unknown entity.
+  {
+    CursorDocument< TyChar > doc( "<!DOCTYPE a [<!ENTITY m '<b/>'>]><a>x &m; y</a>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_ANY_THROW( doc.StrContent() );
+  }
+  // Not well formed: the errors of the DTD are the errors of the document.
+  EXPECT_NE( CursorDocument< TyChar >( "<!DOCTYPE a [<!ELEMENT a (b,c|d)>]><a/>" ).m_strError.find( "The DTD is not well formed" ), std::string::npos );
+  EXPECT_NE( CursorDocument< TyChar >( "<!DOCTYPE a [<!ENTITY % p 'v'><!ENTITY e '%p;'>]><a/>" ).m_strError.find( "within a declaration in the internal subset" ), std::string::npos );
+  EXPECT_FALSE( CursorDocument< TyChar >( "<!DOCTYPE a [" ).FOpened() );
+  // The document is declared standalone: a reference to a parameter entity which isn't declared is not well formed.
+  EXPECT_NE( CursorDocument< TyChar >( "<?xml version='1.0' standalone='yes'?><!DOCTYPE a [ %p; ]><a/>" ).m_strError.find( "the parameter entity [p] is referenced but not declared" ), std::string::npos );
+  {
+    CursorDocument< TyChar > doc( "<?xml version='1.0' standalone='no'?><!DOCTYPE a [ %p; ]><a/>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_EQ( doc.m_cursor.GetDtd().m_rgstrValidityErrors.size(), 1u );
+  }
+  // Only one, and only a document type declaration.
+  EXPECT_FALSE( CursorDocument< TyChar >( "<!DOCTYPE a><!DOCTYPE a><a/>" ).FOpened() );
+  EXPECT_NE( CursorDocument< TyChar >( "<!ELEMENT a EMPTY><a/>" ).m_strError.find( "neither a document type declaration nor the document's element" ), std::string::npos );
+  // XML traits which don't support the DTD: a document type declaration is not read - as it was before.
+  EXPECT_FALSE( ( CursorDocument< TyChar, false >( "<!DOCTYPE a><a/>" ).FOpened() ) );
+  EXPECT_TRUE( ( CursorDocument< TyChar, false >( "<a/>" ).FOpened() ) );
 }
 
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.

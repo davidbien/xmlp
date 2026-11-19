@@ -50,13 +50,14 @@ add_custom_command(
     DEPENDS xmlpgen
 )
 
-add_executable (lexer lexer.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+add_executable (lexer lexer.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
 #setup internal submodule include directories.
 target_include_directories(lexer PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/pgen>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
 )
 target_compile_definitions( lexer
@@ -64,12 +65,13 @@ target_compile_definitions( lexer
 )
 
 if(1)
-add_executable (xmlpgtest_cursorcopy xmlpgtest_cursorcopy.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+add_executable (xmlpgtest_cursorcopy xmlpgtest_cursorcopy.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
 target_include_directories(xmlpgtest_cursorcopy PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/pgen>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
 )
 target_link_libraries(xmlpgtest_cursorcopy gtest gtest_main)
@@ -93,12 +95,13 @@ endif()
 endforeach()
 endif(1)
 
-add_executable (xmlpgtest_doccopy xmlpgtest_doccopy.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+add_executable (xmlpgtest_doccopy xmlpgtest_doccopy.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
 target_include_directories(xmlpgtest_doccopy PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/pgen>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
 )
 target_link_libraries(xmlpgtest_doccopy gtest gtest_main)
@@ -122,12 +125,13 @@ endif()
 endforeach()
 
 # Malformed-input testing of the lexical analyzer's triggers - see the comments in xmlpgtest_malformed.cpp.
-add_executable (xmlpgtest_malformed xmlpgtest_malformed.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+add_executable (xmlpgtest_malformed xmlpgtest_malformed.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
 target_include_directories(xmlpgtest_malformed PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/pgen>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
 )
 target_link_libraries(xmlpgtest_malformed gtest)
@@ -156,13 +160,14 @@ target_compile_definitions( xmlpgtest_dtd
 )
 gtest_discover_tests(xmlpgtest_dtd)
 
-add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
+add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
 #setup internal submodule include directories.
 target_include_directories(xmltestsame PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/pgen>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
 )
 target_compile_definitions( xmltestsame
