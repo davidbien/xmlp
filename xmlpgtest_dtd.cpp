@@ -1105,26 +1105,39 @@ TYPED_TEST( DtdTest, CursorAttributeDefaults )
   }
 }
 
-// The document as the writer writes it from the cursor, which is at the beginning of the document: in the character type
-//  of the cursor and without a byte order mark. ( The writer doesn't write the document type declaration. )
-template < class t_TyChar, bool t_kfSupportDTD >
-std::basic_string< t_TyChar > StrWriteFromCursor( CursorDocument< t_TyChar, t_kfSupportDTD > & _rdoc, bool _fWriteDefaultedAttributes = true )
+// The type of the writer which the tests use: it writes to memory in the character type of the document which is read.
+template < class t_TyChar >
+using TyTestXmlWriter = xml_writer< typename map_input_to_any_output_transport< _l_transport_fixedmem< t_TyChar >, t_TyChar, false_type >::_TyXmlWriteTransport >;
+// What a writer has written to memory.
+template < class t_TyChar, class t_TyXmlWriter >
+std::basic_string< t_TyChar > StrWritten( t_TyXmlWriter & _rxwWriter )
 {
-  typedef typename map_input_to_any_output_transport< _l_transport_fixedmem< t_TyChar >, t_TyChar, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
-  typedef xml_writer< _TyXmlWriteTransport > _TyXmlWriter;
-  _TyXmlWriter xwWriter;
-  xwWriter.SetWriteBOM( false );
-  xwWriter.SetWriteXMLDecl( !_rdoc.m_cursor.FPseudoXMLDecl() );
-  xwWriter.SetWriteDefaultedAttributes( _fWriteDefaultedAttributes );
-  typename _TyXmlWriter::_TyXMLDeclProperties xdp( _rdoc.m_cursor.GetXMLDeclProperties() );
-  xwWriter.OpenMemFile( xdp, nullptr, true );
-  xwWriter.NWriteFromReadCursor( _rdoc.m_cursor );
-  auto & rmsOut = xwWriter.GetTransportOut().GetMemStream();
+  auto & rmsOut = _rxwWriter.GetTransportOut().GetMemStream();
   const size_t knbyWritten = (size_t)rmsOut.GetEndPos();
   std::basic_string< t_TyChar > str( knbyWritten / sizeof( t_TyChar ), 0 );
   rmsOut.Seek( 0, vkSeekBegin );
   rmsOut.Read( str.data(), knbyWritten );
   return str;
+}
+// The document as the writer writes it from the cursor, which is at the beginning of the document: in the character type
+//  of the cursor and without a byte order mark.
+// _fWriteDoctypeDecl: whether to write the document type declaration of the document.
+// _nWriteDefaultedAttributes: whether to write the attributes which the DTD gave the tags: 1, 0 - or -1 for the default
+//  of the writer, which is to write them unless the document type declaration was written.
+template < class t_TyChar, bool t_kfSupportDTD >
+std::basic_string< t_TyChar > StrWriteFromCursor( CursorDocument< t_TyChar, t_kfSupportDTD > & _rdoc, bool _fWriteDoctypeDecl = true, int _nWriteDefaultedAttributes = -1 )
+{
+  typedef TyTestXmlWriter< t_TyChar > _TyXmlWriter;
+  _TyXmlWriter xwWriter;
+  xwWriter.SetWriteBOM( false );
+  xwWriter.SetWriteXMLDecl( !_rdoc.m_cursor.FPseudoXMLDecl() );
+  xwWriter.SetWriteDoctypeDecl( _fWriteDoctypeDecl );
+  if ( _nWriteDefaultedAttributes >= 0 )
+    xwWriter.SetWriteDefaultedAttributes( !!_nWriteDefaultedAttributes );
+  typename _TyXmlWriter::_TyXMLDeclProperties xdp( _rdoc.m_cursor.GetXMLDeclProperties() );
+  xwWriter.OpenMemFile( xdp, nullptr, true );
+  xwWriter.NWriteFromReadCursor( _rdoc.m_cursor );
+  return StrWritten< t_TyChar >( xwWriter );
 }
 // The value of an attribute of the current tag by its position - had without changing what the token holds.
 template < class t_TyChar, bool t_kfSupportDTD >
@@ -1240,12 +1253,20 @@ TYPED_TEST( DtdTest, CursorTokenizedAttributeValues )
     ASSERT_TRUE( doc.m_cursor.FMoveDown() );
     EXPECT_TRUE( StrAttrValue( doc, 0 ) == W( "d2" ) );
   }
-  // The document as it is written from the cursor is the document as it was read - but for its document type declaration.
+  // The document as it is written from the cursor is the document as it was read.
   {
     CursorDocument< TyChar > doc( strDocument.c_str() );
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     std::basic_string< TyChar > strWritten;
     ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_TRUE( strWritten == W( strDocument.c_str() ) ) << StrNarrow( strWritten );
+  }
+  // And without its document type declaration if the writer is told not to write that.
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
     EXPECT_TRUE( strWritten == W( s_szRoot ) ) << StrNarrow( strWritten );
   }
   // GetStringView() - which isn't const - leaves the string in the value in place of the pieces: then that is what the tag has.
@@ -1314,21 +1335,46 @@ TYPED_TEST( DtdTest, CursorDefaultedAttributesAreKnown )
     EXPECT_EQ( doc.StrAttributes(), "kind=\"b\"" );
     EXPECT_FALSE( FIsAttrDefaultValue( doc.m_cursor.GetTagCur().GetLexToken().GetValue()[ vknAttributesIdx ][ 0 ][ vknAttr_ValueIdx ] ) );
   }
-  // Written: the attributes which the DTD gave the tags are attributes of the tags - their values are written as strings are.
+  // Written with its document type declaration - as it is unless the writer is told otherwise: the attributes which
+  //  the DTD gave the tags are not written, since whoever reads the document has them from the declaration again. What
+  //  is written is the document as it was read.
   {
     CursorDocument< TyChar > doc( strDocument.c_str() );
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     std::basic_string< TyChar > strWritten;
     ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
-    EXPECT_EQ( StrNarrow( strWritten ), "<doc lang=' fr' by=\"Bien &amp; Co\" xmlns:p=\"urn:p\"><p:item kind=\"a\"/><p:item kind=\"b\">text</p:item></doc>" );
+    EXPECT_EQ( StrNarrow( strWritten ), strDocument );
+    // And read again it is the same document: the tags have the attributes from the DTD.
+    const std::string strWrittenNarrow( StrNarrow( strWritten ) );
+    CursorDocument< TyChar > docWritten( strWrittenNarrow.c_str() );
+    ASSERT_TRUE( docWritten.FOpened() ) << docWritten.m_strError;
+    ASSERT_TRUE( docWritten.m_cursor.FMoveDown() );
+    EXPECT_EQ( docWritten.StrAttributes(), "lang=\"fr\" by=\"Bien & Co\" xmlns:p=\"urn:p\"" );
   }
-  // Written without them: the document as it was read - but for its document type declaration.
+  // Written without its document type declaration: the attributes which the DTD gave the tags are attributes of the
+  //  tags - they are what the document means.
   {
     CursorDocument< TyChar > doc( strDocument.c_str() );
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     std::basic_string< TyChar > strWritten;
     ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc lang=' fr' by=\"Bien &amp; Co\" xmlns:p=\"urn:p\"><p:item kind=\"a\"/><p:item kind=\"b\">text</p:item></doc>" );
+  }
+  // Either may be had whatever is done about the declaration: without it and without them, and with both.
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false, 0 ) );
     EXPECT_EQ( StrNarrow( strWritten ), s_szRoot );
+  }
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, true, 1 ) );
+    EXPECT_EQ( StrNarrow( strWritten ), std::string( s_szDoctype ) +
+      "<doc lang=' fr' by=\"Bien &amp; Co\" xmlns:p=\"urn:p\"><p:item kind=\"a\"/><p:item kind=\"b\">text</p:item></doc>" );
   }
   // The value is written so that whoever reads it has the same value: the characters which can't be themselves between
   //  the quotes are references - and so are a tab and an end of line, which read as themselves would be spaces.
@@ -1336,7 +1382,7 @@ TYPED_TEST( DtdTest, CursorDefaultedAttributesAreKnown )
     CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ATTLIST doc q CDATA 'say &quot;hi&quot; it&apos;s &#9;tab &lt; &amp; &#13;&#10;'>]><doc/>" );
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     std::basic_string< TyChar > strWritten;
-    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
     EXPECT_EQ( StrNarrow( strWritten ), "<doc q=\"say &quot;hi&quot; it's &#9;tab &lt; &amp; &#13;&#10;\"/>" );
     // And read again without the DTD it is the value which the DTD gave.
     const std::string strWrittenNarrow( StrNarrow( strWritten ) );
@@ -1352,6 +1398,242 @@ TYPED_TEST( DtdTest, CursorDefaultedAttributesAreKnown )
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     auto prXmlDoc = xml_document< TyXmlTraits >::PrCreateXmlDocument();
     ASSERT_NO_THROW( prXmlDoc.first->FromXmlStream( doc.m_cursor, prXmlDoc.second ) );
+  }
+}
+
+// The document type declaration is one of the tokens of the prolog - where it was among the comments, the processing
+//  instructions and the white space there - and its value is its text as it was. The writer writes that: a document
+//  with a DTD which is written from the cursor is the document as it was read.
+TYPED_TEST( DtdTest, DoctypeDeclIsWrittenAsItWasRead )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  static const char s_szBefore[] =
+    "<?xml version=\"1.0\"?>\n"
+    "<!-- before -->\n";
+  static const char s_szDoctype[] =
+    "<!DOCTYPE doc SYSTEM 'doc.dtd' [\n"
+    "  <!-- a comment in the subset -->\n"
+    "  <!ENTITY % decls \"<!ELEMENT item EMPTY>\">\n"
+    "  <!ELEMENT doc ( #PCDATA | item )* >\n"
+    "  %decls;\n"
+    "  <?pi in the subset?>\n"
+    "  <!ATTLIST doc\n\ttitle CDATA #IMPLIED\n\tkind (a|b) 'a'\n\tids IDREFS #IMPLIED>\n"
+    "  <!ENTITY company \"Bien &amp; Co\">\n"
+    "]  >";
+  static const char s_szAfter[] =
+    "\n<?pi after?>\n"
+    "<doc title=\"about\t&company;\" ids=' x1  x2 '>Made by &company;.<item/> &lt;</doc>\n"
+    "<!-- after -->\n";
+  const std::string strDocument = std::string( s_szBefore ) + s_szDoctype + s_szAfter;
+  // The tokens of the prolog: one of them is the declaration.
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FHasDtd() );
+    typedef typename CursorDocument< TyChar >::_TyXmlTraits::_TyXmlToken TyXmlToken;
+    auto & rctxtProlog = doc.m_cursor.GetContextCur();
+    size_t nDoctypeDecls = 0, nComments = 0, nProcessingInstructions = 0, nTokensBeforeDoctype = 0;
+    std::basic_string< TyChar > strDoctypeText;
+    rctxtProlog.ApplyContent( 0, rctxtProlog.NContentTokens(),
+      [&]( const TyXmlToken * _pxtBegin, const TyXmlToken * _pxtEnd )
+      {
+        for ( const TyXmlToken * pxtCur = _pxtBegin; _pxtEnd != pxtCur; ++pxtCur )
+        {
+          if ( pxtCur->FIsDoctypeDecl() )
+          {
+            ++nDoctypeDecls;
+            pxtCur->GetLexToken().GetString( strDoctypeText );
+          }
+          else
+          {
+            nComments += pxtCur->FIsComment();
+            nProcessingInstructions += pxtCur->FIsProcessingInstruction();
+            nTokensBeforeDoctype += !nDoctypeDecls;
+          }
+        }
+      } );
+    EXPECT_EQ( nDoctypeDecls, 1u );
+    EXPECT_TRUE( strDoctypeText == W( s_szDoctype ) ) << StrNarrow( strDoctypeText );
+    EXPECT_EQ( nComments, 1u ); // That of the prolog - not the one within the declaration.
+    EXPECT_EQ( nProcessingInstructions, 1u );
+    EXPECT_GE( nTokensBeforeDoctype, 1u ); // The comment at least: the declaration is where it was.
+  }
+  // Written from the cursor.
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_TRUE( strWritten == W( strDocument.c_str() ) ) << StrNarrow( strWritten );
+  }
+  // A document without one is written as it always was.
+  {
+    const std::string strWithout = std::string( s_szBefore ) + "<doc a='1'>text</doc>\n";
+    CursorDocument< TyChar > doc( strWithout.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_TRUE( strWritten == W( strWithout.c_str() ) ) << StrNarrow( strWritten );
+  }
+  // The writer and a declaration which doesn't come from a cursor: its text is a string. It is written once, in the prolog.
+  {
+    typedef typename CursorDocument< TyChar >::_TyXmlTraits::_TyXmlToken TyXmlToken;
+    CursorDocument< TyChar > doc( "<doc/>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    TyXmlToken xtDoctype( doc.m_xmlParser.GetUserObj(), s_knTokenDoctypeDecl );
+    xtDoctype.GetValue().emplaceVal( W( "<!DOCTYPE doc [<!ATTLIST doc a CDATA 'v'>]>" ) );
+    TyXmlToken xtNotOne( doc.m_xmlParser.GetUserObj(), s_knTokenDoctypeDecl );
+    xtNotOne.GetValue().emplaceVal( W( "<!ELEMENT doc ANY>" ) );
+    {
+      TyTestXmlWriter< TyChar > xwWriter;
+      xwWriter.SetWriteBOM( false );
+      xwWriter.SetWriteXMLDecl( false );
+      xwWriter.OpenMemFile();
+      EXPECT_FALSE( xwWriter.FWroteDoctypeDecl() );
+      EXPECT_TRUE( xwWriter.FWriteDefaultedAttributes() );
+      EXPECT_ANY_THROW( xwWriter.WriteToken( xtNotOne ) );
+      ASSERT_NO_THROW( xwWriter.WriteToken( xtDoctype ) );
+      EXPECT_TRUE( xwWriter.FWroteDoctypeDecl() );
+      EXPECT_FALSE( xwWriter.FWriteDefaultedAttributes() ); // By default they follow the declaration.
+      EXPECT_ANY_THROW( xwWriter.WriteToken( xtDoctype ) ); // There may be only one.
+      ASSERT_NO_THROW( xwWriter.NWriteFromReadCursor( doc.m_cursor ) );
+      EXPECT_EQ( StrNarrow( StrWritten< TyChar >( xwWriter ) ), "<!DOCTYPE doc [<!ATTLIST doc a CDATA 'v'>]><doc/>" );
+      EXPECT_ANY_THROW( xwWriter.WriteToken( xtDoctype ) ); // Not after the first tag.
+    }
+  }
+}
+
+// The writer and values which are strings - not the pieces of a document which was read: the value of an attribute or
+//  character data which was set to a string, or which GetStringView() left as one. Such a string is the characters of
+//  the value: what can't be written as itself is written as a reference - and whether an '&' in it begins a reference
+//  which is to be written as one is as the writer or the tag is told ( EDetectReferences ).
+// _edrDetectReferences: edrDetectReferencesCount for the default of the writer.
+// Returns what was written for <doc a='...' b="..." c='3'>...</doc>: the value given is that of a and b and it is the
+//  character data. c has its value from the document - by GetStringView(), which leaves the value as a string.
+template < class t_TyChar >
+std::basic_string< t_TyChar > StrWriteStringValues( const char * _pszValue, EDetectReferences _edrDetectReferences )
+{
+  typedef CursorDocument< t_TyChar, false > _TyCursorDocument;
+  typedef typename _TyCursorDocument::_TyXmlTraits::_TyXmlToken _TyXmlToken;
+  const std::basic_string< t_TyChar > strValue = StrWiden< t_TyChar >( _pszValue );
+  _TyCursorDocument doc( "<doc a='1' b=\"2\" c='3'>text</doc>" );
+  VerifyThrowSz( doc.FOpened(), "%s", doc.m_strError.c_str() );
+  TyTestXmlWriter< t_TyChar > xwWriter;
+  xwWriter.SetWriteBOM( false );
+  xwWriter.SetWriteXMLDecl( false );
+  if ( edrDetectReferencesCount != _edrDetectReferences )
+    xwWriter.SetDefaultDetectReferences( _edrDetectReferences );
+  xwWriter.OpenMemFile();
+  VerifyThrow( doc.m_cursor.FMoveDown() );
+  {
+    auto & rxtTag = doc.m_cursor.GetTagCur();
+    auto & rrgAttrs = rxtTag.GetLexToken().GetValue()[ vknAttributesIdx ];
+    rrgAttrs[ 0 ][ vknAttr_ValueIdx ].emplaceVal( std::basic_string< t_TyChar >( strValue ) );
+    rrgAttrs[ 1 ][ vknAttr_ValueIdx ].emplaceVal( std::basic_string< t_TyChar >( strValue ) );
+    std::basic_string_view< t_TyChar > svC;
+    rxtTag.GetLexToken().GetStringView( svC, rrgAttrs[ 2 ][ vknAttr_ValueIdx ] );
+    VerifyThrow( !rrgAttrs[ 2 ][ vknAttr_ValueIdx ].FHasTypedData() );
+    auto xwtDoc = xwWriter.StartTag( std::move( rxtTag ), true );
+    xwtDoc.Commit();
+    _TyXmlToken xtCharData( doc.m_xmlParser.GetUserObj(), s_knTokenCharData );
+    xtCharData.GetValue().emplaceVal( std::basic_string< t_TyChar >( strValue ) );
+    xwWriter.WriteToken( xtCharData );
+  } // The tag is ended.
+  return StrWritten< t_TyChar >( xwWriter );
+}
+// What was written read again: the values of a and b and the character data.
+template < class t_TyChar >
+void ExpectReadBack( std::basic_string< t_TyChar > const & _rstrWritten, const char * _pszValueA, const char * _pszValueB, const char * _pszContent )
+{
+  auto W = []( const char * _psz ) { return StrWiden< t_TyChar >( _psz ); };
+  std::string strWritten; // What the tests write is ASCII - with the tabs and the ends of lines as they are.
+  for ( t_TyChar ch : _rstrWritten )
+    strWritten += ( ch < 0x7f ) ? char( ch ) : '?';
+  CursorDocument< t_TyChar, false > doc( strWritten.c_str() );
+  ASSERT_TRUE( doc.FOpened() ) << doc.m_strError << ": " << strWritten;
+  ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+  EXPECT_TRUE( StrAttrValue( doc, 0 ) == W( _pszValueA ) ) << StrNarrow( StrAttrValue( doc, 0 ) );
+  EXPECT_TRUE( StrAttrValue( doc, 1 ) == W( _pszValueB ) ) << StrNarrow( StrAttrValue( doc, 1 ) );
+  EXPECT_TRUE( StrAttrValue( doc, 2 ) == W( "3" ) );
+  EXPECT_TRUE( doc.StrContent() == W( _pszContent ) ) << StrNarrow( doc.StrContent() );
+}
+
+TYPED_TEST( DtdTest, WriterStringValues )
+{
+  typedef TypeParam TyChar;
+  // Plain values.
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( "plain value", edrDetectReferencesCount ) );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc a='plain value' b=\"plain value\" c='3'>plain value</doc>" );
+    ExpectReadBack( strWritten, "plain value", "plain value", "plain value" );
+  }
+  // An empty value.
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( "", edrDetectReferencesCount ) );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc a='' b=\"\" c='3'></doc>" );
+  }
+  // The characters which can't be written as themselves - and those which can be where they are: the other quote in
+  //  the value of an attribute, and both of them and "]]>" where each may be.
+  static const char s_szMarkup[] = "it's <\"quoted\"> ]]> x";
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( s_szMarkup, edrDetectReferencesCount ) );
+    EXPECT_EQ( StrNarrow( strWritten ),
+      "<doc a='it&apos;s &lt;\"quoted\"> ]]> x' b=\"it's &lt;&quot;quoted&quot;> ]]> x\" c='3'>it's &lt;\"quoted\"> ]]&gt; x</doc>" );
+    ExpectReadBack( strWritten, s_szMarkup, s_szMarkup, s_szMarkup );
+  }
+  // At the ends of the value, and one after another.
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( "<<'\"&&]]>]]>", edrNoReferences ) );
+    ExpectReadBack( strWritten, "<<'\"&&]]>]]>", "<<'\"&&]]>]]>", "<<'\"&&]]>]]>" );
+  }
+  // A tab and an end of line in the value of an attribute are written as references: read as themselves they would be spaces.
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( "a\tb\r\nc", edrDetectReferencesCount ) );
+    EXPECT_TRUE( strWritten == StrWiden< TyChar >( "<doc a='a&#9;b&#13;&#10;c' b=\"a&#9;b&#13;&#10;c\" c='3'>a\tb\r\nc</doc>" ) ) << StrNarrow( strWritten );
+    ExpectReadBack( strWritten, "a\tb\r\nc", "a\tb\r\nc", "a\tb\r\nc" );
+  }
+  // '&': with edrNoReferences every one of them is a character of the value - what is read is what was given.
+  static const char s_szReferences[] = "A & B &amp; &#65;&#x42; &nosuch; &#1; &lt";
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( s_szReferences, edrNoReferences ) );
+    EXPECT_EQ( StrNarrow( strWritten ),
+      "<doc a='A &amp; B &amp;amp; &amp;#65;&amp;#x42; &amp;nosuch; &amp;#1; &amp;lt' b=\"A &amp; B &amp;amp; &amp;#65;&amp;#x42; &amp;nosuch; &amp;#1; &amp;lt\" c='3'>"
+      "A &amp; B &amp;amp; &amp;#65;&amp;#x42; &amp;nosuch; &amp;#1; &amp;lt</doc>" );
+    ExpectReadBack( strWritten, s_szReferences, s_szReferences, s_szReferences );
+  }
+  // By default ( edrAutoReferenceNoError ) what reads as a reference and is one - to an entity which is known or to a
+  //  character - is written as it is, and any other '&' is a character of the value.
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( s_szReferences, edrDetectReferencesCount ) );
+    EXPECT_EQ( StrNarrow( strWritten ),
+      "<doc a='A &amp; B &amp; &#65;&#x42; &amp;nosuch; &amp;#1; &amp;lt' b=\"A &amp; B &amp; &#65;&#x42; &amp;nosuch; &amp;#1; &amp;lt\" c='3'>"
+      "A &amp; B &amp; &#65;&#x42; &amp;nosuch; &amp;#1; &amp;lt</doc>" );
+    ExpectReadBack( strWritten, "A & B & AB &nosuch; &#1; &lt", "A & B & AB &nosuch; &#1; &lt", "A & B & AB &nosuch; &#1; &lt" );
+  }
+  // edrAutoReference: what reads as a reference and isn't one is an error - an '&' which doesn't read as one is still a character.
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( "A & B &amp; &#65; &lt", edrAutoReference ) );
+    ExpectReadBack( strWritten, "A & B & A &lt", "A & B & A &lt", "A & B & A &lt" );
+    EXPECT_ANY_THROW( StrWriteStringValues< TyChar >( "&nosuch;", edrAutoReference ) );
+    EXPECT_ANY_THROW( StrWriteStringValues< TyChar >( "&#1;", edrAutoReference ) );
+    EXPECT_ANY_THROW( StrWriteStringValues< TyChar >( "&#x110000;", edrAutoReference ) );
+  }
+  // edrAlwaysReference: every '&' must begin a reference.
+  {
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteStringValues< TyChar >( "&amp;&lt;&#65;", edrAlwaysReference ) );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc a='&amp;&lt;&#65;' b=\"&amp;&lt;&#65;\" c='3'>&amp;&lt;&#65;</doc>" );
+    EXPECT_ANY_THROW( StrWriteStringValues< TyChar >( "A & B", edrAlwaysReference ) );
+    EXPECT_ANY_THROW( StrWriteStringValues< TyChar >( "&nosuch;", edrAlwaysReference ) );
   }
 }
 
