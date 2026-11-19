@@ -47,6 +47,8 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include "xml_inc.h"
 #include "xml_inc.h"
 #include "xml_tag.h"
+#include "xml_transport.h"
+#include "xml_writer.h"
 #include "xml_dtd.h"
 #include "gtest/gtest.h"
 
@@ -1100,6 +1102,256 @@ TYPED_TEST( DtdTest, CursorAttributeDefaults )
       fError = true;
     }
     EXPECT_TRUE( fError );
+  }
+}
+
+// The document as the writer writes it from the cursor, which is at the beginning of the document: in the character type
+//  of the cursor and without a byte order mark. ( The writer doesn't write the document type declaration. )
+template < class t_TyChar, bool t_kfSupportDTD >
+std::basic_string< t_TyChar > StrWriteFromCursor( CursorDocument< t_TyChar, t_kfSupportDTD > & _rdoc, bool _fWriteDefaultedAttributes = true )
+{
+  typedef typename map_input_to_any_output_transport< _l_transport_fixedmem< t_TyChar >, t_TyChar, false_type >::_TyXmlWriteTransport _TyXmlWriteTransport;
+  typedef xml_writer< _TyXmlWriteTransport > _TyXmlWriter;
+  _TyXmlWriter xwWriter;
+  xwWriter.SetWriteBOM( false );
+  xwWriter.SetWriteXMLDecl( !_rdoc.m_cursor.FPseudoXMLDecl() );
+  xwWriter.SetWriteDefaultedAttributes( _fWriteDefaultedAttributes );
+  typename _TyXmlWriter::_TyXMLDeclProperties xdp( _rdoc.m_cursor.GetXMLDeclProperties() );
+  xwWriter.OpenMemFile( xdp, nullptr, true );
+  xwWriter.NWriteFromReadCursor( _rdoc.m_cursor );
+  auto & rmsOut = xwWriter.GetTransportOut().GetMemStream();
+  const size_t knbyWritten = (size_t)rmsOut.GetEndPos();
+  std::basic_string< t_TyChar > str( knbyWritten / sizeof( t_TyChar ), 0 );
+  rmsOut.Seek( 0, vkSeekBegin );
+  rmsOut.Read( str.data(), knbyWritten );
+  return str;
+}
+// The value of an attribute of the current tag by its position - had without changing what the token holds.
+template < class t_TyChar, bool t_kfSupportDTD >
+std::basic_string< t_TyChar > StrAttrValue( CursorDocument< t_TyChar, t_kfSupportDTD > & _rdoc, size_t _nAttr )
+{
+  auto const & rltokTag = _rdoc.m_cursor.GetTagCur().GetLexToken();
+  std::basic_string< t_TyChar > str;
+  rltokTag.GetString( str, rltokTag.GetValue()[ vknAttributesIdx ][ _nAttr ][ vknAttr_ValueIdx ] );
+  return str;
+}
+
+// The value of an attribute - 3.3.3: a tab or an end of line which is written in the value is a space in it, and an end
+//  of line written as #xD #xA is one ( 2.11 ). A character reference to one of them is that character.
+// What the document has is still what the token has: the writer writes the value as it was written.
+template < class t_TyChar, bool t_kfSupportDTD >
+void TestAttributeValueWhitespace()
+{
+  auto W = []( const char * _psz ) { return StrWiden< t_TyChar >( _psz ); };
+  static const char s_szDocument[] =
+    "<a x=\"one\ttwo\r\nthree\n\nfour\" y='\t&#9;b\r' z=\"\n\" plain=\"p q\" r='&#13;&#10;'>text\ttab\n<b w=\"\r\n\r\n\"/></a>";
+  {
+    CursorDocument< t_TyChar, t_kfSupportDTD > doc( s_szDocument );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_TRUE( StrAttrValue( doc, 0 ) == W( "one two three  four" ) );
+    EXPECT_TRUE( StrAttrValue( doc, 1 ) == W( " \tb " ) ); // The reference is to a tab and that is what the value has.
+    EXPECT_TRUE( StrAttrValue( doc, 2 ) == W( " " ) );
+    EXPECT_TRUE( StrAttrValue( doc, 3 ) == W( "p q" ) );
+    EXPECT_TRUE( StrAttrValue( doc, 4 ) == W( "\r\n" ) );
+    EXPECT_TRUE( doc.StrContent() == W( "text\ttab\n" ) ); // Character data is not the value of an attribute.
+    // In another character type, and a view where there is one: a value all in one piece which needs nothing done to it.
+    {
+      auto const & rltokTag = doc.m_cursor.GetTagCur().GetLexToken();
+      auto const & rrgAttrs = rltokTag.GetValue()[ vknAttributesIdx ];
+      std::u32string str32;
+      rltokTag.GetString( str32, rrgAttrs[ 0 ][ vknAttr_ValueIdx ] );
+      EXPECT_TRUE( str32 == U"one two three  four" );
+      std::basic_string_view< t_TyChar > svPlain, svWhitespace;
+      std::basic_string< t_TyChar > strPlain, strWhitespace;
+      EXPECT_TRUE( rltokTag.FGetStringViewOrString( svPlain, strPlain, rrgAttrs[ 3 ][ vknAttr_ValueIdx ] ) );
+      EXPECT_TRUE( svPlain == W( "p q" ) );
+      EXPECT_FALSE( rltokTag.FGetStringViewOrString( svWhitespace, strWhitespace, rrgAttrs[ 2 ][ vknAttr_ValueIdx ] ) );
+      EXPECT_TRUE( svWhitespace == W( " " ) );
+    }
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_TRUE( StrAttrValue( doc, 0 ) == W( "  " ) );
+  }
+  // The document as it is written from the cursor is the document as it was read.
+  {
+    CursorDocument< t_TyChar, t_kfSupportDTD > doc( s_szDocument );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< t_TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_TRUE( strWritten == W( s_szDocument ) ) << StrNarrow( strWritten );
+  }
+}
+TYPED_TEST( DtdTest, AttributeValueWhitespace )
+{
+  TestAttributeValueWhitespace< TypeParam, false >();
+  TestAttributeValueWhitespace< TypeParam, true >();
+}
+
+// The value of an attribute whose declared type is not CDATA - 3.3.3: the spaces at its ends are not in it and a
+//  sequence of spaces within it is one space. The spaces are those of the value: what a tab which is written became, and
+//  what a character reference to a space stands for.
+// And still what the document has is what the token has: the writer writes the value as it was written.
+TYPED_TEST( DtdTest, CursorTokenizedAttributeValues )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  static const char s_szDoctype[] =
+    "<!DOCTYPE doc [\n"
+    "<!ATTLIST doc id ID #IMPLIED toks NMTOKENS #IMPLIED cd CDATA #IMPLIED refs IDREFS #IMPLIED e (a|b) #IMPLIED empty NMTOKENS #IMPLIED>\n"
+    "]>";
+  static const char s_szRoot[] =
+    "<doc id='  d1 ' toks=\" a   b\tc \n\" cd='  x   y ' refs='&#32;r1  &#x20; r2&#32;' e=' a' empty='  ' other='  o  '><doc id=\"d2\"/></doc>";
+  const std::string strDocument = std::string( s_szDoctype ) + s_szRoot;
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_TRUE( StrAttrValue( doc, 0 ) == W( "d1" ) );
+    EXPECT_TRUE( StrAttrValue( doc, 1 ) == W( "a b c" ) );
+    EXPECT_TRUE( StrAttrValue( doc, 2 ) == W( "  x   y " ) ); // CDATA: as it is.
+    EXPECT_TRUE( StrAttrValue( doc, 3 ) == W( "r1 r2" ) );
+    EXPECT_TRUE( StrAttrValue( doc, 4 ) == W( "a" ) );
+    EXPECT_TRUE( StrAttrValue( doc, 5 ) == W( "" ) );
+    EXPECT_TRUE( StrAttrValue( doc, 6 ) == W( "  o  " ) ); // Not declared: as CDATA.
+    auto & rltokTag = doc.m_cursor.GetTagCur().GetLexToken();
+    auto & rrgAttrs = rltokTag.GetValue()[ vknAttributesIdx ];
+    // In another character type.
+    {
+      std::u32string str32;
+      rltokTag.GetString( str32, rrgAttrs[ 1 ][ vknAttr_ValueIdx ] );
+      EXPECT_TRUE( str32 == U"a b c" );
+    }
+    // A view of a value which is all in one piece of the document: the piece without the spaces at its ends.
+    {
+      std::basic_string_view< TyChar > svId, svE, svEmpty, svOr, svToks;
+      std::basic_string< TyChar > strOr;
+      rltokTag.KGetStringView( svId, rrgAttrs[ 0 ][ vknAttr_ValueIdx ] );
+      rrgAttrs[ 4 ][ vknAttr_ValueIdx ].KGetStringView( rltokTag, svE );
+      rltokTag.KGetStringView( svEmpty, rrgAttrs[ 5 ][ vknAttr_ValueIdx ] );
+      EXPECT_TRUE( svId == W( "d1" ) );
+      EXPECT_TRUE( svE == W( "a" ) );
+      EXPECT_TRUE( svEmpty.empty() );
+      EXPECT_TRUE( rltokTag.FGetStringViewOrString( svOr, strOr, rrgAttrs[ 0 ][ vknAttr_ValueIdx ] ) );
+      EXPECT_TRUE( svOr == W( "d1" ) );
+      EXPECT_TRUE( rrgAttrs[ 0 ][ vknAttr_ValueIdx ].FHasTypedData() ); // None of those changed the value.
+      // There is no view of a value in more than one piece - as of one with a reference.
+      EXPECT_ANY_THROW( rltokTag.KGetStringView( svToks, rrgAttrs[ 1 ][ vknAttr_ValueIdx ] ) );
+    }
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_TRUE( StrAttrValue( doc, 0 ) == W( "d2" ) );
+  }
+  // The document as it is written from the cursor is the document as it was read - but for its document type declaration.
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_TRUE( strWritten == W( s_szRoot ) ) << StrNarrow( strWritten );
+  }
+  // GetStringView() - which isn't const - leaves the string in the value in place of the pieces: then that is what the tag has.
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "id=\"d1\" toks=\"a b c\" cd=\"  x   y \" refs=\"r1 r2\" e=\"a\" empty=\"\" other=\"  o  \"" );
+    EXPECT_EQ( doc.StrAttributes(), "id=\"d1\" toks=\"a b c\" cd=\"  x   y \" refs=\"r1 r2\" e=\"a\" empty=\"\" other=\"  o  \"" );
+  }
+}
+
+// An attribute which the DTD gave a tag is known for what it is - its value is an xml_attr_default_value - until its
+//  value is set to something else. The writer writes such attributes as any others unless it is told not to: then the
+//  tags are written as they were read.
+TYPED_TEST( DtdTest, CursorDefaultedAttributesAreKnown )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  static const char s_szDoctype[] =
+    "<!DOCTYPE doc [<!ENTITY co 'Bien &amp; Co'>"
+    "<!ATTLIST doc by CDATA '&co;' lang NMTOKEN ' en ' xmlns:p CDATA #FIXED 'urn:p'><!ATTLIST p:item kind (a|b) \"a\">]>";
+  static const char s_szRoot[] = "<doc lang=' fr'><p:item/><p:item kind=\"b\">text</p:item></doc>";
+  const std::string strDocument = std::string( s_szDoctype ) + s_szRoot;
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    auto & rltokTag = doc.m_cursor.GetTagCur().GetLexToken();
+    auto & rrgAttrs = rltokTag.GetValue()[ vknAttributesIdx ];
+    ASSERT_EQ( rrgAttrs.GetSize(), 3u );
+    EXPECT_FALSE( FIsAttrDefaultValue( rrgAttrs[ 0 ][ vknAttr_ValueIdx ] ) ); // lang: the tag has it.
+    EXPECT_TRUE( FIsAttrDefaultValue( rrgAttrs[ 1 ][ vknAttr_ValueIdx ] ) ); // by
+    EXPECT_TRUE( FIsAttrDefaultValue( rrgAttrs[ 2 ][ vknAttr_ValueIdx ] ) ); // xmlns:p
+    // The value every way - and it is still what it was: nothing is kept in its place.
+    EXPECT_TRUE( StrAttrValue( doc, 1 ) == W( "Bien & Co" ) );
+    for ( int nRepeat = 0; nRepeat < 2; ++nRepeat )
+    {
+      std::basic_string_view< TyChar > svTok, svVal, svKTok, svOr;
+      std::basic_string< TyChar > strOr;
+      std::u32string str32, strOr32;
+      std::u32string_view svOr32;
+      rltokTag.GetStringView( svTok, rrgAttrs[ 1 ][ vknAttr_ValueIdx ] );
+      rrgAttrs[ 1 ][ vknAttr_ValueIdx ].GetStringView( rltokTag, svVal );
+      rltokTag.KGetStringView( svKTok, rrgAttrs[ 1 ][ vknAttr_ValueIdx ] );
+      EXPECT_TRUE( rltokTag.FGetStringViewOrString( svOr, strOr, rrgAttrs[ 1 ][ vknAttr_ValueIdx ] ) );
+      rltokTag.GetString( str32, rrgAttrs[ 1 ][ vknAttr_ValueIdx ] );
+      EXPECT_EQ( rltokTag.FGetStringViewOrString( svOr32, strOr32, rrgAttrs[ 1 ][ vknAttr_ValueIdx ] ), sizeof( TyChar ) == sizeof( char32_t ) );
+      EXPECT_TRUE( svTok == W( "Bien & Co" ) );
+      EXPECT_TRUE( svVal == W( "Bien & Co" ) );
+      EXPECT_TRUE( svKTok == W( "Bien & Co" ) );
+      EXPECT_TRUE( svOr == W( "Bien & Co" ) );
+      EXPECT_TRUE( str32 == U"Bien & Co" );
+      EXPECT_TRUE( svOr32 == U"Bien & Co" );
+      EXPECT_TRUE( FIsAttrDefaultValue( rrgAttrs[ 1 ][ vknAttr_ValueIdx ] ) );
+    }
+    EXPECT_EQ( doc.StrAttributes(), "lang=\"fr\" by=\"Bien & Co\" xmlns:p=\"urn:p\"" );
+    // Set to something else it is no longer the DTD's.
+    rrgAttrs[ 1 ][ vknAttr_ValueIdx ].emplaceVal( W( "someone else" ) );
+    EXPECT_FALSE( FIsAttrDefaultValue( rrgAttrs[ 1 ][ vknAttr_ValueIdx ] ) );
+    EXPECT_EQ( doc.StrAttributes(), "lang=\"fr\" by=\"someone else\" xmlns:p=\"urn:p\"" );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "kind=\"a\"" );
+    EXPECT_TRUE( FIsAttrDefaultValue( doc.m_cursor.GetTagCur().GetLexToken().GetValue()[ vknAttributesIdx ][ 0 ][ vknAttr_ValueIdx ] ) );
+    ASSERT_TRUE( doc.m_cursor.FNextTag() );
+    EXPECT_EQ( doc.StrAttributes(), "kind=\"b\"" );
+    EXPECT_FALSE( FIsAttrDefaultValue( doc.m_cursor.GetTagCur().GetLexToken().GetValue()[ vknAttributesIdx ][ 0 ][ vknAttr_ValueIdx ] ) );
+  }
+  // Written: the attributes which the DTD gave the tags are attributes of the tags - their values are written as strings are.
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc lang=' fr' by=\"Bien &amp; Co\" xmlns:p=\"urn:p\"><p:item kind=\"a\"/><p:item kind=\"b\">text</p:item></doc>" );
+  }
+  // Written without them: the document as it was read - but for its document type declaration.
+  {
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
+    EXPECT_EQ( StrNarrow( strWritten ), s_szRoot );
+  }
+  // The value is written so that whoever reads it has the same value: the characters which can't be themselves between
+  //  the quotes are references - and so are a tab and an end of line, which read as themselves would be spaces.
+  {
+    CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ATTLIST doc q CDATA 'say &quot;hi&quot; it&apos;s &#9;tab &lt; &amp; &#13;&#10;'>]><doc/>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_EQ( StrNarrow( strWritten ), "<doc q=\"say &quot;hi&quot; it's &#9;tab &lt; &amp; &#13;&#10;\"/>" );
+    // And read again without the DTD it is the value which the DTD gave.
+    const std::string strWrittenNarrow( StrNarrow( strWritten ) );
+    CursorDocument< TyChar, false > docWritten( strWrittenNarrow.c_str() );
+    ASSERT_TRUE( docWritten.FOpened() ) << docWritten.m_strError;
+    ASSERT_TRUE( docWritten.m_cursor.FMoveDown() );
+    EXPECT_TRUE( StrAttrValue( docWritten, 0 ) == W( "say \"hi\" it's \ttab < & \r\n" ) );
+  }
+  // Read into a tree: the values there are copies of their own - they don't refer to the DTD of the cursor.
+  {
+    typedef typename CursorDocument< TyChar >::_TyXmlTraits TyXmlTraits;
+    CursorDocument< TyChar > doc( strDocument.c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    auto prXmlDoc = xml_document< TyXmlTraits >::PrCreateXmlDocument();
+    ASSERT_NO_THROW( prXmlDoc.first->FromXmlStream( doc.m_cursor, prXmlDoc.second ) );
   }
 }
 

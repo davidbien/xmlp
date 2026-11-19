@@ -73,8 +73,11 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 
 	// We use the same triggers for these just to save implementation space and because we know by the final trigger
 	//	whether a single or double quote was present.
-	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(u"&<\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
-	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++lnot(u"&<\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
+	// A run of tabs and of ends of lines within the value is a piece of the value of its own: each of them is a space in
+	//  the value of the attribute ( 3.3.3 ) and the characters themselves are what the document has - see s_kdtAttrWhitespace.
+	// A state may have but one trigger leaving it so both kinds of run begin with the same trigger.
+	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ( ++lnot(u"&<\"\t\r\n") * t(TyGetTriggerCharDataEnd<_TyLexT>()) | ++( l(0x9) | l(0xA) | l(0xD) ) * t(TyGetTriggerAttWhitespaceEnd<_TyLexT>()) );
+	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ( ++lnot(u"&<\'\t\r\n") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>()) | ++( l(0x9) | l(0xA) | l(0xD) ) * t(TyGetTriggerAttWhitespaceSingleQuoteEnd<_TyLexT>()) );
 	_TyFinal	AttCharDataNoDoubleQuoteOutputValidate = ~lnot(u"&<\"");
 	_TyFinal	AttCharDataNoSingleQuoteOutputValidate = ~lnot(u"&<\'");
 	// We need only record whether single or double quotes were used as a convenience to any reader/writer system that may want to duplicate the current manner of quoting.
