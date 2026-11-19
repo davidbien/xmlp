@@ -28,6 +28,9 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #define _L_REGEXP_DEFAULTCHAR	char32_t
 #define __L_DEFAULT_ALLOCATOR _TyDefaultAllocator
 #include "_l_inc.h"
+// The parser generator: for the parser of the DTD - see xmlpgen_dtd.cpp. Before the single letter macros below.
+#include "_p_inc.h"
+#include "_p_lexgen.h"
 #include <fstream>
 #include <tuple>
 

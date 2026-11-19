@@ -30,12 +30,14 @@ include_directories("${gtest_SOURCE_DIR}/include")
 add_custom_target(make-build-unittest-dir ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory "unittests")
 
-add_executable (xmlpgen "xmlpgen.cpp" "xmlpgen.h" "xmlpgen_utf32.cpp" "xmlpgen_utf16.cpp" "xmlpgen_utf8.cpp" )
+# xmlpgen generates the lexical analyzers ( with lexang ) and the parser of the DTD ( with pgen ) - xmlpgen_dtd.cpp.
+add_executable (xmlpgen "xmlpgen.cpp" "xmlpgen.h" "xmlpgen_utf32.cpp" "xmlpgen_utf16.cpp" "xmlpgen_utf8.cpp" "xmlpgen_dtd.cpp" )
 
 target_include_directories(xmlpgen PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/pgen>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
 )
 target_compile_definitions( xmlpgen
@@ -43,7 +45,7 @@ target_compile_definitions( xmlpgen
 )
 
 add_custom_command(
-    OUTPUT  _xmlplex_utf32.h _xmlplex_utf16.h _xmlplex_utf8.h
+    OUTPUT  _xmlplex_utf32.h _xmlplex_utf16.h _xmlplex_utf8.h _xmlpdtd.h
     COMMAND xmlpgen
     DEPENDS xmlpgen
 )
@@ -134,6 +136,23 @@ target_compile_definitions( xmlpgtest_malformed
   PUBLIC TRACESENABLED=0
 )
 gtest_discover_tests(xmlpgtest_malformed)
+
+# The DTD: the tokens of the DTD and the parser generated for it by xmlpgen - see the comments in xmlpgtest_dtd.cpp.
+add_executable (xmlpgtest_dtd xmlpgtest_dtd.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
+target_include_directories(xmlpgtest_dtd PUBLIC
+  ${CMAKE_CURRENT_BINARY_DIR}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/pgen>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
+)
+target_link_libraries(xmlpgtest_dtd gtest)
+target_compile_definitions( xmlpgtest_dtd
+  PUBLIC __NDEBUG_THROW
+  PUBLIC TRACESENABLED=0
+)
+gtest_discover_tests(xmlpgtest_dtd)
 
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h )
 #setup internal submodule include directories.

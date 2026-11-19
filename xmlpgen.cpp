@@ -31,9 +31,13 @@ main( int argc, char **argv )
 }
 
 // We want to be able to read each format natively. Each will have a different generated DFA but will be able to share the same _lexical_analyzer in the impl.
-void GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp );
-void GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp );
-void GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp );
+// Each gives the modes of its lexical analyzer for the parser of the DTD: its DTD DFAs and the tokens of each.
+typedef ns_pg::LexerModes< vtyTokenIdent > _TyDtdLexerModes;
+void GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, _TyDtdLexerModes & _rmodesDtd );
+void GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, _TyDtdLexerModes & _rmodesDtd );
+void GenerateUTF8XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, _TyDtdLexerModes & _rmodesDtd );
+// The parser of the DTD - xmlpgen_dtd.cpp. The one parser is used with each of the lexical analyzers.
+void GenerateDtdParser( _TyDtdLexerModes const & _rmodes );
 
 int
 TryMain( int argc, char ** argv )
@@ -45,8 +49,17 @@ TryMain( int argc, char ** argv )
 
 	// The "base" generator generates the lexicographical analyzer template as well as the state machine.
 	// The "specialized" generators are only state machines and they share the lexicographical analyzer template.
-	GenerateUTF32XmlLex( egfdBaseGenerator );
-	GenerateUTF16XmlLex( egfdSpecializedGenerator );
-	GenerateUTF8XmlLex( egfdSpecializedGenerator );
+	_TyDtdLexerModes modesDtdUTF32, modesDtdUTF16, modesDtdUTF8;
+	GenerateUTF32XmlLex( egfdBaseGenerator, modesDtdUTF32 );
+	GenerateUTF16XmlLex( egfdSpecializedGenerator, modesDtdUTF16 );
+	GenerateUTF8XmlLex( egfdSpecializedGenerator, modesDtdUTF8 );
+	// The parser of the DTD is generated once: the modes - and the tokens of each - must be the same for each character type.
+	for ( const _TyDtdLexerModes * pmodes : { &modesDtdUTF16, &modesDtdUTF8 } )
+	{
+		VerifyThrowSz( pmodes->RgModeNames() == modesDtdUTF32.RgModeNames(), "The DTD modes of the lexical analyzers differ." );
+		for ( uint32_t nMode = 0; nMode < uint32_t( modesDtdUTF32.NModes() ); ++nMode )
+			VerifyThrowSz( pmodes->RGetTokensOfMode( nMode ) == modesDtdUTF32.RGetTokensOfMode( nMode ), "The tokens of DTD mode [%s] differ between the lexical analyzers.", modesDtdUTF32.RgModeNames()[ nMode ].c_str() );
+	}
+	GenerateDtdParser( modesDtdUTF32 );
 	return 0;
 }
