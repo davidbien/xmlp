@@ -789,13 +789,19 @@ struct CursorDocument
   _TyCursor m_cursor;
   std::string m_strError; // If the document couldn't be opened.
 
-  explicit CursorDocument( const char * _pszText )
+  // _rresolver: how the external entities of the DTD are had - if they are to be read.
+  // _pszBase: the location of the document, for the resolver.
+  explicit CursorDocument( const char * _pszText, xml_external_entity_resolver< t_TyChar > const & _rresolver = nullptr, const char * _pszBase = nullptr )
   {
     if ( sizeof( t_TyChar ) > 1 )
       m_strText += t_TyChar( 0xFEFF ); // The byte order mark: how the encoding of what is in memory is known.
     m_strText.append( _pszText, _pszText + strlen( _pszText ) );
     try
     {
+      if ( !!_rresolver )
+        m_xmlParser.SetExternalEntityResolver( _rresolver );
+      if ( !!_pszBase )
+        m_xmlParser.SetBaseLocation( std::basic_string< t_TyChar >( _pszBase, _pszBase + strlen( _pszBase ) ) );
       m_cursor = m_xmlParser.OpenMemory( m_strText.data(), m_strText.length() * sizeof( t_TyChar ) );
     }
     catch ( std::exception const & rexc )
@@ -1988,6 +1994,410 @@ TYPED_TEST( DtdTest, Validation )
   }
 }
 
+// External entities - the external subset of the DTD and its external parameter entities: they are read if the parser
+//  has a resolver for them.
+// The entities of a test: the text of each by its system identifier. What is asked for is recorded: each system
+//  identifier with the base which it was asked with. The location of an entity is its system identifier.
+struct TestEntities
+{
+  std::map< std::string, std::string > m_mapEntities;
+  std::vector< std::string > m_rgstrAsked; // "system identifier <- base"
+
+  template < class t_TyChar >
+  xml_external_entity_resolver< t_TyChar > Resolver()
+  {
+    return [this]( xml_dtd_external_id< t_TyChar > const & _rexternalId, std::basic_string_view< t_TyChar > _svBase,
+                   std::basic_string< t_TyChar > & _rstrText, std::basic_string< t_TyChar > & _rstrLocation ) -> bool
+    {
+      const std::string strSystem = _rexternalId.m_optstrSystem.has_value() ? StrNarrow( *_rexternalId.m_optstrSystem ) : std::string();
+      m_rgstrAsked.push_back( strSystem + " <- " + StrNarrow( _svBase ) );
+      std::map< std::string, std::string >::const_iterator cit = m_mapEntities.find( strSystem );
+      if ( m_mapEntities.end() == cit )
+        return false;
+      _rstrText.assign( cit->second.begin(), cit->second.end() );
+      _rstrLocation.assign( strSystem.begin(), strSystem.end() );
+      return true;
+    };
+  }
+};
+
+TYPED_TEST( DtdTest, ExternalSubsetIsRead )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  static const char s_szDocument[] =
+    "<!DOCTYPE doc SYSTEM 'doc.dtd' [\n"
+    "<!ATTLIST doc a CDATA 'internal'>\n"
+    "<!ENTITY e 'internal e'>\n"
+    "]>\n"
+    "<doc>&e; &x;</doc>";
+  TestEntities entities;
+  entities.m_mapEntities[ "doc.dtd" ] =
+    "<?xml version='1.0' encoding='utf-8'?>\n"
+    "<!ELEMENT doc (#PCDATA)>\n"
+    "<!ATTLIST doc a CDATA 'external' b NMTOKEN ' b '>\n"
+    "<!ENTITY e 'external e'>\n"
+    "<!ENTITY x 'external x'>\n";
+  // The external subset is read after the internal subset: what the internal subset declares is what binds ( 2.8 ).
+  {
+    CursorDocument< TyChar, true, true > doc( s_szDocument, entities.Resolver< TyChar >(), "dir/doc.xml" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_EQ( entities.m_rgstrAsked, ( std::vector< std::string >{ "doc.dtd <- dir/doc.xml" } ) );
+    xml_dtd< TyChar > const & rdtd = doc.m_cursor.GetDtd();
+    EXPECT_TRUE( rdtd.m_fExternalSubsetRead );
+    EXPECT_TRUE( rdtd.FAllDeclarationsRead() );
+    EXPECT_TRUE( !!rdtd.PGetElement( W( "doc" ) ) );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "a=\"internal\" b=\"b\"" );
+    EXPECT_EQ( StrNarrow( doc.StrContent() ), "internal e external x" );
+    (void)doc.m_cursor.FNextTag();
+    EXPECT_TRUE( doc.m_cursor.FIsValid() ) << ( doc.m_cursor.RgValidityErrors().empty() ? std::string() : doc.m_cursor.RgValidityErrors().front() );
+  }
+  // Without a resolver - or if the resolver doesn't have it - it is not read: that is no error, and what it declares is not known.
+  {
+    CursorDocument< TyChar > doc( s_szDocument );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_FALSE( doc.m_cursor.GetDtd().m_fExternalSubsetRead );
+    EXPECT_FALSE( doc.m_cursor.GetDtd().FAllDeclarationsRead() );
+    EXPECT_FALSE( !!doc.m_cursor.GetDtd().PGetElement( W( "doc" ) ) );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "a=\"internal\"" );
+  }
+  {
+    TestEntities entitiesNone;
+    CursorDocument< TyChar > doc( s_szDocument, entitiesNone.Resolver< TyChar >() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_EQ( entitiesNone.m_rgstrAsked, ( std::vector< std::string >{ "doc.dtd <- " } ) );
+    EXPECT_FALSE( doc.m_cursor.GetDtd().m_fExternalSubsetRead );
+  }
+  // The document written from the cursor is the document: its document type declaration as it was - the external subset is not part of that.
+  {
+    CursorDocument< TyChar > doc( s_szDocument, entities.Resolver< TyChar >() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_EQ( StrNarrowExact( strWritten ), s_szDocument );
+  }
+  // And written without the declaration it is the same document for whoever reads it without any DTD.
+  {
+    CursorDocument< TyChar > doc( s_szDocument, entities.Resolver< TyChar >() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
+    const std::string strWithout = StrNarrowExact( strWritten );
+    EXPECT_EQ( strWithout, "\n<doc a=\"internal\" b=\"b\">internal e external x</doc>" );
+    CursorDocument< TyChar > docWith( s_szDocument, entities.Resolver< TyChar >() );
+    CursorDocument< TyChar, false > docWithout( strWithout.c_str() );
+    ASSERT_TRUE( docWith.FOpened() && docWithout.FOpened() );
+    std::string strDifference;
+    EXPECT_TRUE( FCompareXmlDocuments( docWith.m_cursor, docWithout.m_cursor, xml_compare_options(), &strDifference ) ) << strDifference;
+  }
+}
+
+// External parameter entities, and references to parameter entities within declarations - which may be in the external
+//  subset and in the text of parameter entities, and not in the internal subset itself.
+TYPED_TEST( DtdTest, ExternalParameterEntities )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  // A reference between the declarations of the internal subset to an external parameter entity - which declares another:
+  //  the system identifier of that is relative to the entity which declares it.
+  {
+    TestEntities entities;
+    entities.m_mapEntities[ "decls.ent" ] =
+      "<?xml encoding='utf-8'?>"
+      "<!ELEMENT doc (item*)>\n"
+      "<!ENTITY % more SYSTEM 'sub/more.ent'>\n"
+      "%more;\n"
+      "<!ATTLIST item b CDATA 'after'>\n";
+    entities.m_mapEntities[ "sub/more.ent" ] = "<!ELEMENT item EMPTY><!ATTLIST item a CDATA 'from more'>";
+    CursorDocument< TyChar, true, true > doc(
+      "<!DOCTYPE doc [\n"
+      "<!ENTITY % decls SYSTEM 'decls.ent'>\n"
+      "%decls;\n"
+      "]>\n"
+      "<doc><item/></doc>", entities.Resolver< TyChar >(), "doc.xml" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_EQ( entities.m_rgstrAsked, ( std::vector< std::string >{ "decls.ent <- doc.xml", "sub/more.ent <- decls.ent" } ) );
+    EXPECT_TRUE( doc.m_cursor.GetDtd().FAllDeclarationsRead() );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "a=\"from more\" b=\"after\"" );
+    while ( doc.m_cursor.FMoveUp() )
+      ;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    (void)doc.m_cursor.FNextTag();
+    EXPECT_TRUE( doc.m_cursor.FIsValid() ) << ( doc.m_cursor.RgValidityErrors().empty() ? std::string() : doc.m_cursor.RgValidityErrors().front() );
+  }
+  // An external parameter entity which isn't had is not read: what it declares is not known and the declarations of
+  //  entities and of attributes after it are not processed ( 5.1 ).
+  {
+    TestEntities entities;
+    CursorDocument< TyChar > doc(
+      "<!DOCTYPE doc [<!ENTITY % decls SYSTEM 'nosuch.ent'>%decls;<!ATTLIST doc a CDATA 'v'>]><doc/>", entities.Resolver< TyChar >() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_TRUE( doc.m_cursor.GetDtd().m_fStoppedProcessingDeclarations );
+    EXPECT_FALSE( doc.m_cursor.GetDtd().FAllDeclarationsRead() );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "" );
+  }
+  // Within declarations - in the external subset: the name of an element type, a content model and a piece of one, the
+  //  definitions of attributes, the keyword of a conditional section, a literal; and an entity which is external.
+  {
+    TestEntities entities;
+    entities.m_mapEntities[ "doc.dtd" ] =
+      "<!ENTITY % inline \"b | i\">\n"
+      "<!ENTITY % text \"(#PCDATA | %inline;)*\">\n"
+      "<!ELEMENT p %text;>\n"
+      "<!ELEMENT b (#PCDATA)><!ELEMENT i (#PCDATA)>\n"
+      "<!ENTITY % atts \"id ID #IMPLIED class CDATA 'c'\">\n"
+      "<!ATTLIST p %atts;>\n"
+      "<!ENTITY % draft 'INCLUDE'><!ENTITY % final 'IGNORE'>\n"
+      "<![%draft;[ <!ELEMENT note (#PCDATA)> ]]>\n"
+      "<![ %final; [ <!ELEMENT hidden (#PCDATA)> ]]>\n"
+      "<!ENTITY % name \"doc\">\n"
+      "<!ENTITY % items \"p | note\">\n"
+      "<!ELEMENT %name; (head?, (%items;)*)>\n"
+      "<!ENTITY % extatts SYSTEM 'atts.ent'>\n"
+      "<!ATTLIST %name; %extatts;>\n"
+      "<!ENTITY % headname 'head'><!ENTITY % headdecl '<!ELEMENT &#37;headname; EMPTY>'>\n"
+      "%headdecl;\n"
+      "<!ENTITY % system \"'pic.gif'\"><!NOTATION gif SYSTEM 'gif'>\n"
+      "<!ENTITY pic SYSTEM %system; NDATA gif>\n"
+      "<!ENTITY greeting \"hello %name;\">\n";
+    entities.m_mapEntities[ "atts.ent" ] = "<?xml version='1.0' encoding='utf-8'?>lang NMTOKEN 'en'";
+    CursorDocument< TyChar, true, true > doc(
+      "<!DOCTYPE doc SYSTEM 'doc.dtd'>\n"
+      "<doc><head/><p id='x'>&greeting; <b>bold</b></p><note>n</note></doc>", entities.Resolver< TyChar >(), "doc.xml" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_EQ( entities.m_rgstrAsked, ( std::vector< std::string >{ "doc.dtd <- doc.xml", "atts.ent <- doc.dtd" } ) );
+    xml_dtd< TyChar > const & rdtd = doc.m_cursor.GetDtd();
+    EXPECT_TRUE( rdtd.FAllDeclarationsRead() );
+    EXPECT_TRUE( rdtd.m_rgstrValidityErrors.empty() ) << ( rdtd.m_rgstrValidityErrors.empty() ? std::string() : rdtd.m_rgstrValidityErrors.front() );
+    ASSERT_TRUE( !!rdtd.PGetElement( W( "p" ) ) );
+    EXPECT_EQ( rdtd.PGetElement( W( "p" ) )->m_eContent, exdcMixed );
+    EXPECT_EQ( StrJoin( rdtd.PGetElement( W( "p" ) )->m_rgstrMixedNames ), "b i" );
+    EXPECT_TRUE( !!rdtd.PGetElement( W( "note" ) ) );
+    EXPECT_FALSE( !!rdtd.PGetElement( W( "hidden" ) ) );
+    ASSERT_TRUE( !!rdtd.PGetElement( W( "doc" ) ) );
+    EXPECT_EQ( StrContentParticle( rdtd.PGetElement( W( "doc" ) )->m_cpChildren ), "(head?,(p|note)*)" );
+    ASSERT_TRUE( !!rdtd.PGetElement( W( "head" ) ) );
+    EXPECT_EQ( rdtd.PGetElement( W( "head" ) )->m_eContent, exdcEmpty );
+    ASSERT_TRUE( !!rdtd.PGetGeneralEntity( W( "pic" ) ) );
+    EXPECT_EQ( StrNarrow( *rdtd.PGetGeneralEntity( W( "pic" ) )->m_externalId.m_optstrSystem ), "pic.gif" );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( doc.StrAttributes(), "lang=\"en\"" );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() ); // head
+    ASSERT_TRUE( doc.m_cursor.FNextTag() ); // p
+    EXPECT_EQ( doc.StrAttributes(), "id=\"x\" class=\"c\"" );
+    EXPECT_EQ( StrNarrow( doc.StrContent() ), "hello doc " );
+    while ( doc.m_cursor.FMoveUp() )
+      ;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    (void)doc.m_cursor.FNextTag();
+    EXPECT_TRUE( doc.m_cursor.FIsValid() ) << ( doc.m_cursor.RgValidityErrors().empty() ? std::string() : doc.m_cursor.RgValidityErrors().front() );
+  }
+  // WFC: PEs in Internal Subset - not within a declaration of the internal subset itself. But within the text of a
+  //  parameter entity which is referenced there it may be.
+  {
+    CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ENTITY % c '(#PCDATA)'><!ELEMENT doc %c;>]><doc/>" );
+    EXPECT_FALSE( doc.FOpened() );
+  }
+  {
+    CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ENTITY % c '(#PCDATA)'><!ENTITY % d '<!ELEMENT doc &#37;c;>'>%d;]><doc/>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( !!doc.m_cursor.GetDtd().PGetElement( W( "doc" ) ) );
+    EXPECT_EQ( doc.m_cursor.GetDtd().PGetElement( W( "doc" ) )->m_eContent, exdcMixed );
+  }
+  // Within a declaration there is no going on without the text of the entity: one which isn't declared, one which isn't
+  //  had - and one which refers to itself ( WFC: No Recursion ).
+  for ( const char * pszSubset : { "<!ELEMENT doc %nosuch;>", "<!ENTITY % e SYSTEM 'nosuch.ent'><!ELEMENT doc %e;>",
+                                   "<!ENTITY % a '(&#37;b;)'><!ENTITY % b '&#37;a;'><!ELEMENT doc %a;>" } )
+  {
+    TestEntities entities;
+    entities.m_mapEntities[ "doc.dtd" ] = pszSubset;
+    CursorDocument< TyChar > doc( "<!DOCTYPE doc SYSTEM 'doc.dtd'><doc/>", entities.Resolver< TyChar >() );
+    EXPECT_FALSE( doc.FOpened() ) << pszSubset;
+  }
+}
+
+// The validity constraints which are about the external declarations: those of the external subset and of the texts of
+//  parameter entities.
+TYPED_TEST( DtdTest, ValidationOfExternalDeclarations )
+{
+  typedef TypeParam TyChar;
+  // Read the document - with the entities - by a validating cursor. Returns what is not valid about it: see StrValidate().
+  auto Validate = []( const char * _pszDocument, const char * _pszExternalSubset ) -> std::string
+  {
+    TestEntities entities;
+    entities.m_mapEntities[ "doc.dtd" ] = _pszExternalSubset;
+    CursorDocument< TyChar, true, true > doc( _pszDocument, entities.Resolver< TyChar >() );
+    if ( !doc.FOpened() )
+      return "not opened: " + doc.m_strError;
+    try
+    {
+      if ( doc.m_cursor.FMoveDown() )
+        (void)doc.m_cursor.FNextTag();
+    }
+    catch ( std::exception const & rexc )
+    {
+      return std::string( "exception: " ) + rexc.what();
+    }
+    std::string strErrors;
+    for ( std::string const & rstrError : doc.m_cursor.GetDtd().m_rgstrValidityErrors )
+      strErrors += rstrError + "\n";
+    for ( std::string const & rstrError : doc.m_cursor.RgValidityErrors() )
+      strErrors += rstrError + "\n";
+    return strErrors;
+  };
+  static const char s_szDocument[] = "<!DOCTYPE doc SYSTEM 'doc.dtd'><doc/>";
+  // The text of a parameter entity is properly nested with the declarations: what begins in it ends in it.
+  EXPECT_EQ( Validate( s_szDocument, "<!ENTITY % e '(#PCDATA)'><!ELEMENT doc %e;>" ), "" );
+  EXPECT_EQ( Validate( s_szDocument, "<!ENTITY % e '#PCDATA'><!ELEMENT doc (%e;)>" ), "" );
+  // VC: Proper Declaration/PE Nesting.
+  EXPECT_EQ( Validate( s_szDocument, "<!ENTITY % e '>'><!ELEMENT doc (#PCDATA) %e;" ),
+    "A declaration begins in the text of one entity and ends in that of another: parameter entities are not properly nested with the declarations.\n" );
+  // VC: Proper Group/PE Nesting.
+  EXPECT_EQ( Validate( s_szDocument, "<!ENTITY % e '(#PCDATA'><!ELEMENT doc %e;)>" ),
+    "A parenthesized group of a content model begins in the text of one entity and ends in that of another: parameter entities are not properly nested with the declarations.\n" );
+  EXPECT_EQ( Validate( "<!DOCTYPE doc SYSTEM 'doc.dtd'><doc><a/></doc>", "<!ELEMENT a EMPTY><!ENTITY % e 'a)'><!ELEMENT doc (%e;>" ),
+    "A parenthesized group of a content model begins in the text of one entity and ends in that of another: parameter entities are not properly nested with the declarations.\n" );
+  // VC: Proper Conditional Section/PE Nesting.
+  EXPECT_EQ( Validate( s_szDocument, "<!ELEMENT doc EMPTY><!ENTITY % e 'INCLUDE['><![ %e; <!ATTLIST doc a CDATA #IMPLIED> ]]>" ),
+    "The \"<![\" and the '[' of a conditional section are in the texts of different entities: parameter entities are not properly nested with the declarations.\n" );
+  EXPECT_EQ( Validate( s_szDocument, "<!ELEMENT doc EMPTY><!ENTITY % e '> ]]>'><![INCLUDE[ <!ATTLIST doc a CDATA #IMPLIED %e;" ),
+    "A declaration begins in the text of one entity and ends in that of another: parameter entities are not properly nested with the declarations.\n"
+    "A conditional section begins in the text of one entity and ends in that of another: parameter entities are not properly nested with the declarations.\n" );
+  // A reference between declarations is another matter: the text of the entity must be whole declarations or the DTD is not well formed.
+  EXPECT_EQ( Validate( s_szDocument, "<!ELEMENT doc EMPTY><!ENTITY % e '<!ATTLIST doc a CDATA #IMPLIED> ]]>'><![INCLUDE[ %e;" ).substr( 0, 11 ), "not opened:" );
+
+  // VC: Standalone Document Declaration: a document which is declared standalone is not changed by external declarations.
+  static const char s_szExternal[] =
+    "<!ELEMENT doc (item*)>\n"
+    "<!ELEMENT item (#PCDATA)>\n"
+    "<!ATTLIST item kind NMTOKEN #IMPLIED lang CDATA 'en'>\n"
+    "<!ENTITY ext 'external text'>\n";
+  static const char s_szYes[] = "<?xml version='1.0' standalone='yes'?><!DOCTYPE doc SYSTEM 'doc.dtd' [<!ENTITY int 'internal text'>]>";
+  static const char s_szNo[] = "<?xml version='1.0' standalone='no'?><!DOCTYPE doc SYSTEM 'doc.dtd' [<!ENTITY int 'internal text'>]>";
+  static const char s_szNothing[] = "<!DOCTYPE doc SYSTEM 'doc.dtd' [<!ENTITY int 'internal text'>]>";
+  auto ValidateStandalone = [&]( const char * _pszProlog, const char * _pszRoot )
+  {
+    return Validate( ( std::string( _pszProlog ) + _pszRoot ).c_str(), s_szExternal );
+  };
+  // What owes nothing to them.
+  EXPECT_EQ( ValidateStandalone( s_szYes, "<doc><item kind='k' lang='fr'>&int; &lt;</item></doc>" ), "" );
+  // An attribute by its default.
+  static const char s_szDefault[] = "<doc><item/></doc>";
+  EXPECT_EQ( ValidateStandalone( s_szYes, s_szDefault ),
+    "The document is declared standalone and a tag <item> has the attribute [lang] by its default - which is declared externally.\n" );
+  // A reference to an entity - in character data and in the value of an attribute.
+  static const char s_szEntity[] = "<doc><item lang='&ext;'>&ext;</item></doc>";
+  EXPECT_EQ( ValidateStandalone( s_szYes, s_szEntity ),
+    "The document is declared standalone and refers to the entity [ext] - which is declared externally.\n"
+    "The document is declared standalone and refers to the entity [ext] - which is declared externally.\n" );
+  // The value of an attribute which its type makes another.
+  static const char s_szNormalized[] = "<doc><item lang='x' kind=' k '/></doc>";
+  EXPECT_EQ( ValidateStandalone( s_szYes, s_szNormalized ),
+    "The document is declared standalone and the value of an attribute is normalized by the type of the attribute [kind] - which is declared externally.\n" );
+  // White space within element content.
+  static const char s_szWhiteSpace[] = "<doc> <item lang='x'/>\n</doc>";
+  EXPECT_EQ( ValidateStandalone( s_szYes, s_szWhiteSpace ),
+    "The document is declared standalone and has white space within the element <doc> - whose element content is declared externally.\n" );
+  // None of which is anything if the document is not declared standalone - or says that it isn't.
+  for ( const char * pszRoot : { s_szDefault, s_szEntity, s_szNormalized, s_szWhiteSpace } )
+  {
+    EXPECT_EQ( ValidateStandalone( s_szNo, pszRoot ), "" ) << pszRoot;
+    EXPECT_EQ( ValidateStandalone( s_szNothing, pszRoot ), "" ) << pszRoot;
+  }
+}
+
+// External entities which are files - FReadExternalEntityFile(): each in an encoding of its own.
+TEST( DtdExternalFiles, FilesInTheirEncodings )
+{
+  namespace fs = std::filesystem;
+  const fs::path pathDir = fs::temp_directory_path() / "xmlpgtest_dtd_external";
+  std::error_code ec;
+  fs::remove_all( pathDir, ec );
+  ASSERT_TRUE( fs::create_directories( pathDir / "sub", ec ) ) << ec.message();
+  auto WriteFile = []( fs::path const & _rpath, std::string const & _rstrBytes )
+  {
+    std::ofstream ofs( _rpath, std::ios::binary );
+    ofs.write( _rstrBytes.data(), std::streamsize( _rstrBytes.size() ) );
+  };
+  auto Utf16 = []( const char * _psz, bool _fLittleEndian )
+  {
+    std::string strBytes( _fLittleEndian ? "\xff\xfe" : "\xfe\xff" );
+    for ( ; !!*_psz; ++_psz )
+    {
+      strBytes += _fLittleEndian ? *_psz : '\0';
+      strBytes += _fLittleEndian ? '\0' : *_psz;
+    }
+    return strBytes;
+  };
+  // The external subset in UTF-16 with a byte order mark; it refers to an entity beside it which is in ISO-8859-1 -
+  //  as its text declaration says - and to one in a directory below, in UTF-16 of the other byte order.
+  WriteFile( pathDir / "doc.dtd", Utf16(
+    "<!ELEMENT doc (#PCDATA)>\n"
+    "<!ENTITY % latin SYSTEM 'latin.ent'>%latin;\n"
+    "<!ENTITY % big SYSTEM 'sub/big.ent'>%big;\n", true ) );
+  WriteFile( pathDir / "latin.ent", "<?xml version='1.0' encoding='ISO-8859-1'?><!ENTITY e 'caf\xe9'>" );
+  WriteFile( pathDir / "sub" / "big.ent", Utf16( "<!ENTITY % beside SYSTEM 'beside.ent'>%beside;<!ATTLIST doc a CDATA 'big'>", false ) );
+  WriteFile( pathDir / "sub" / "beside.ent", "\xef\xbb\xbf<!ATTLIST doc b CDATA 'beside'>" ); // UTF-8 with a byte order mark.
+  const std::string strDocumentPath = ( pathDir / "doc.xml" ).generic_string();
+  static const char s_szDocument[] = "<!DOCTYPE doc SYSTEM 'doc.dtd'><doc>&e;</doc>";
+  {
+    typedef xml_traits< _l_transport_fixedmem< char16_t >, true, true > TyXmlTraits;
+    std::u16string strText( 1, char16_t( 0xFEFF ) );
+    strText.append( s_szDocument, s_szDocument + strlen( s_szDocument ) );
+    xml_parser< TyXmlTraits > xmlParser;
+    xmlParser.SetReadExternalEntityFiles();
+    xmlParser.SetBaseLocation( std::u16string( strDocumentPath.begin(), strDocumentPath.end() ) );
+    xml_read_cursor< TyXmlTraits > cursor;
+    ASSERT_NO_THROW( cursor = xmlParser.OpenMemory( strText.data(), strText.length() * sizeof( char16_t ) ) );
+    ASSERT_TRUE( cursor.FHasDtd() );
+    EXPECT_TRUE( cursor.GetDtd().FAllDeclarationsRead() );
+    ASSERT_TRUE( cursor.FMoveDown() );
+    std::u16string strContent;
+    cursor.GetContextCur().GetContentString( strContent );
+    EXPECT_TRUE( strContent == u"caf\u00e9" );
+    auto const & rltokTag = cursor.GetTagCur().GetLexToken();
+    auto const & rrgAttrs = rltokTag.GetValue()[ vknAttributesIdx ];
+    ASSERT_EQ( rrgAttrs.GetSize(), 2u );
+    std::u16string strB, strA;
+    rltokTag.GetString( strB, rrgAttrs[ 0 ][ vknAttr_ValueIdx ] );
+    rltokTag.GetString( strA, rrgAttrs[ 1 ][ vknAttr_ValueIdx ] );
+    EXPECT_TRUE( strB == u"beside" );
+    EXPECT_TRUE( strA == u"big" );
+    (void)cursor.FNextTag();
+    EXPECT_TRUE( cursor.FIsValid() );
+  }
+  // Without being told to, nothing is read.
+  {
+    typedef xml_traits< _l_transport_fixedmem< char8_t >, true, false > TyXmlTraits;
+    xml_parser< TyXmlTraits > xmlParser;
+    xmlParser.SetBaseLocation( std::u8string( strDocumentPath.begin(), strDocumentPath.end() ) );
+    xml_read_cursor< TyXmlTraits > cursor;
+    ASSERT_NO_THROW( cursor = xmlParser.OpenMemory( s_szDocument, strlen( s_szDocument ) ) );
+    ASSERT_TRUE( cursor.FHasDtd() );
+    EXPECT_FALSE( cursor.GetDtd().m_fExternalSubsetRead );
+  }
+  // Only files: an entity which is elsewhere is not read.
+  {
+    xml_dtd_external_id< char8_t > externalId;
+    externalId.m_optstrSystem = u8"http://example.com/doc.dtd";
+    std::u8string strText, strLocation;
+    EXPECT_FALSE( FReadExternalEntityFile< char8_t >( externalId, std::u8string_view(), strText, strLocation ) );
+    externalId.m_optstrSystem = u8"nosuch.dtd";
+    const std::u8string strBase( strDocumentPath.begin(), strDocumentPath.end() );
+    EXPECT_FALSE( FReadExternalEntityFile< char8_t >( externalId, strBase, strText, strLocation ) );
+    externalId.m_optstrSystem = u8"sub/beside.ent";
+    ASSERT_TRUE( FReadExternalEntityFile< char8_t >( externalId, strBase, strText, strLocation ) );
+    EXPECT_TRUE( strText == u8"<!ATTLIST doc b CDATA 'beside'>" );
+    EXPECT_TRUE( strLocation.ends_with( u8"/sub/beside.ent" ) );
+  }
+  fs::remove_all( pathDir, ec );
+}
+
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.
 // The suite tests whole documents and we only have the DTD as yet, so what is tested is what can be said of the DTD alone:
 //  - WellFormedDocuments: the document type declaration of every document which the suite says is well formed - valid or
@@ -2207,8 +2617,9 @@ TEST( DtdConformance, ExternalSubsets )
 {
   if ( !FHaveConformanceSuite() )
     GTEST_SKIP() << "No conformance suite at " << XMLP_XMLCONF_DIR;
-  // These have references to parameter entities within declarations: they are accepted when those are substituted - then
-  //  take them out of this list.
+  // This is of the grammar alone - the tokens as they are in the file. These have references to parameter entities
+  //  within declarations, which the grammar doesn't have: xml_dtd_parser puts the text of the entity in place of such a
+  //  reference - see ExternalSubsetsAreRead below, where these are read.
   const std::set< std::string > setParameterEntitiesWithinDeclarations{
     "ibm/invalid/P49/ibm49i01.dtd", "ibm/invalid/P50/ibm50i01.dtd", "ibm/invalid/P51/ibm51i01.dtd",
     "ibm/valid/P49/ibm49v01.dtd", "ibm/valid/P50/ibm50v01.dtd", "ibm/valid/P51/ibm51v02.dtd", "sun/valid/dtdtest.dtd" };
@@ -2270,10 +2681,11 @@ enum EConformanceValidity
   ecvNotValid
 };
 // Read a document of the suite with a validating cursor - in UTF-8 - and say whether it is valid.
-// A document is not judged if what it is depends on what we don't read: it has an external subset or refers to a
-//  parameter entity which isn't read ( its declarations are then not all known ), it has no document type declaration,
-//  it isn't in UTF-8 - or it can't be read at all, which is for what isn't supported yet since all of these documents
-//  are well formed.
+// The external subset and the external parameter entities of the document are read: they are files of the suite.
+// A document is not judged if nothing is found wrong with it and what it is depends on what we don't read: it refers
+//  to an entity whose replacement text has markup or which is external, or declarations of it were not read. Nor if it
+//  has no document type declaration, it isn't in UTF-8 - or it can't be read at all, which is for what isn't supported
+//  yet since all of these documents are well formed.
 // _rstrWhy: the first violation, or why it wasn't judged.
 EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string & _rstrWhy )
 {
@@ -2287,7 +2699,8 @@ EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string &
     _rstrWhy = "not UTF-8";
     return ecvNotJudged;
   }
-  CursorDocument< char8_t, true, true > doc( strBytes.c_str() );
+  // The external subset and the external parameter entities are files of the suite beside the document.
+  CursorDocument< char8_t, true, true > doc( strBytes.c_str(), &FReadExternalEntityFile< char8_t >, _rpath.generic_string().c_str() );
   if ( !doc.FOpened() )
   {
     _rstrWhy = "not opened: " + doc.m_strError;
@@ -2309,7 +2722,13 @@ EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string &
     return ecvNotJudged;
   }
   xml_dtd< char8_t > const & rdtd = doc.m_cursor.GetDtd();
-  if ( rdtd.m_optExternalId.has_value() || rdtd.m_fStoppedProcessingDeclarations )
+  if ( !rdtd.m_rgstrValidityErrors.empty() || !doc.m_cursor.RgValidityErrors().empty() )
+  {
+    // Not valid whatever else there is to know of it.
+    _rstrWhy = !rdtd.m_rgstrValidityErrors.empty() ? rdtd.m_rgstrValidityErrors.front() : doc.m_cursor.RgValidityErrors().front();
+    return ecvNotValid;
+  }
+  if ( !rdtd.FAllDeclarationsRead() )
   {
     _rstrWhy = "declarations which are not read";
     return ecvNotJudged;
@@ -2354,10 +2773,56 @@ TEST( DtdConformance, ValidAndInvalidDocuments )
   }
   if ( !nValidJudged && !nInvalidJudged && !nNotJudged )
     return; // The suite is not here.
-  // Those which are judged - so that it is noticed if they no longer are. 229, 69 and 127 when this was written.
-  EXPECT_GE( nValidJudged, 220u );
-  EXPECT_GE( nInvalidJudged, 65u );
-  EXPECT_LE( nNotJudged, 130u );
+  // Those which are judged - so that it is noticed if they no longer are. 284, 126 and 15 when this was written: those
+  //  which aren't refer to an entity whose text has markup or is external, or are not in UTF-8.
+  EXPECT_GE( nValidJudged, 284u );
+  EXPECT_GE( nInvalidJudged, 126u );
+  EXPECT_LE( nNotJudged, 15u );
+}
+
+// The external subsets of the suite are read by xml_dtd_parser - with the external parameter entities which they refer
+//  to, which are files beside them, and with the references to parameter entities within their declarations.
+TEST( DtdConformance, ExternalSubsetsAreRead )
+{
+  if ( !FHaveConformanceSuite() )
+    GTEST_SKIP() << "No conformance suite at " << XMLP_XMLCONF_DIR;
+  // A text declaration without an encoding declaration, which [77] requires.
+  const std::set< std::string > setNotExternalSubsets{ "ibm/invalid/P51/ibm51i03.dtd" };
+  size_t nRead = 0;
+  for ( const char * pszDir : { "ibm/valid", "ibm/invalid", "sun/valid", "sun/invalid", "xmltest/valid", "xmltest/invalid" } )
+  {
+    for ( std::string const & rstrFile : RgConformanceFiles( pszDir, ".dtd" ) )
+    {
+      const fs::path pathFile = PathConformanceFile( rstrFile );
+      std::ifstream ifs( pathFile, std::ios::binary );
+      const std::string strBytes( ( std::istreambuf_iterator< char >( ifs ) ), std::istreambuf_iterator< char >() );
+      std::string strError;
+      try
+      {
+        std::u8string strText;
+        DecodeExternalEntity( (const uint8_t *)strBytes.data(), strBytes.size(), strText );
+        const std::string strBase = pathFile.generic_string();
+        xml_dtd< char8_t > dtd;
+        xml_dtd_parser< char8_t > dtdParser( dtd );
+        dtdParser.SetExternalEntityResolver( &FReadExternalEntityFile< char8_t >, std::u8string( strBase.begin(), strBase.end() ) );
+        dtdParser.ParseExternalSubset( strText );
+      }
+      catch ( std::exception const & rexc )
+      {
+        strError = rexc.what();
+        if ( strError.empty() )
+          strError = "error";
+      }
+      if ( setNotExternalSubsets.contains( rstrFile ) )
+        EXPECT_FALSE( strError.empty() ) << rstrFile;
+      else
+      {
+        EXPECT_EQ( strError, "" ) << rstrFile;
+        nRead += strError.empty() ? 1 : 0;
+      }
+    }
+  }
+  EXPECT_GE( nRead, 45u );
 }
 #endif //XMLP_XMLCONF_DIR
 
