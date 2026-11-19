@@ -820,8 +820,8 @@ struct CursorDocument
     for ( size_t nAttr = 0; nAttr < rrgAttrs.GetSize(); ++nAttr )
     {
       std::basic_string_view< t_TyChar > svName, svValue;
-      // The value says what it is: what the tag has is in the document and what was added is a string.
-      rrgAttrs[ nAttr ][ vknNameIdx ].GetStringView( rltokTag, svName );
+      // What the tag has is in the document and what was added is a string: asking the token or asking the value is the same.
+      rltokTag.GetStringView( svName, rrgAttrs[ nAttr ][ vknNameIdx ] );
       rrgAttrs[ nAttr ][ vknAttr_ValueIdx ].GetStringView( rltokTag, svValue );
       str += ( str.empty() ? "" : " " ) + StrNarrow( svName ) + "=\"" + StrNarrow( svValue ) + "\"";
     }
@@ -882,9 +882,39 @@ TYPED_TEST( DtdTest, Cursor )
   // And those in the values of its attributes.
   {
     auto & rltokTag = doc.m_cursor.GetTagCur().GetLexToken();
-    std::basic_string_view< TyChar > svTitle;
-    rltokTag.GetStringView( svTitle, rltokTag.GetValue()[ vknAttributesIdx ][ 0 ][ vknAttr_ValueIdx ] );
-    EXPECT_EQ( StrNarrow( svTitle ), "about Bien & Co" );
+    auto & rvalTitle = rltokTag.GetValue()[ vknAttributesIdx ][ 0 ][ vknAttr_ValueIdx ];
+    // While the value is the positions of the pieces in the document - it has a reference so there is no view of it.
+    ASSERT_TRUE( rvalTitle.FHasTypedData() );
+    {
+      std::basic_string_view< TyChar > svTok, svVal;
+      std::basic_string< TyChar > strTok, strVal, strGetTok, strGetVal;
+      EXPECT_FALSE( rltokTag.FGetStringViewOrString( svTok, strTok, rvalTitle ) );
+      EXPECT_FALSE( rvalTitle.FGetStringViewOrString( rltokTag, svVal, strVal ) );
+      rltokTag.GetString( strGetTok, rvalTitle );
+      rvalTitle.GetString( rltokTag, strGetVal );
+      EXPECT_EQ( StrNarrow( svTok ), "about Bien & Co" );
+      EXPECT_EQ( StrNarrow( svVal ), "about Bien & Co" );
+      EXPECT_EQ( StrNarrow( strGetTok ), "about Bien & Co" );
+      EXPECT_EQ( StrNarrow( strGetVal ), "about Bien & Co" );
+      EXPECT_TRUE( rvalTitle.FHasTypedData() );
+    }
+    // GetStringView() leaves the string in the value: any number of times, through the token or through the value.
+    for ( int nRepeat = 0; nRepeat < 2; ++nRepeat )
+    {
+      std::basic_string_view< TyChar > svTok, svVal, svKTok, svKVal, svOrTok, svOrVal;
+      std::basic_string< TyChar > strOrTok, strOrVal, strGetTok, strGetVal;
+      rltokTag.GetStringView( svTok, rvalTitle );
+      rvalTitle.GetStringView( rltokTag, svVal );
+      EXPECT_FALSE( rvalTitle.FHasTypedData() );
+      rltokTag.KGetStringView( svKTok, rvalTitle );
+      rvalTitle.KGetStringView( rltokTag, svKVal );
+      EXPECT_TRUE( rltokTag.FGetStringViewOrString( svOrTok, strOrTok, rvalTitle ) );
+      EXPECT_TRUE( rvalTitle.FGetStringViewOrString( rltokTag, svOrVal, strOrVal ) );
+      rltokTag.GetString( strGetTok, rvalTitle );
+      rvalTitle.GetString( rltokTag, strGetVal );
+      for ( std::basic_string_view< TyChar > sv : { svTok, svVal, svKTok, svKVal, svOrTok, svOrVal, std::basic_string_view< TyChar >( strGetTok ), std::basic_string_view< TyChar >( strGetVal ) } )
+        EXPECT_EQ( StrNarrow( sv ), "about Bien & Co" );
+    }
   }
 }
 
