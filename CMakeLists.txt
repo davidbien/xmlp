@@ -151,6 +151,8 @@ target_link_libraries(xmlpgtest_dtd gtest)
 target_compile_definitions( xmlpgtest_dtd
   PUBLIC __NDEBUG_THROW
   PUBLIC TRACESENABLED=0
+  # The W3C XML Conformance Test Suite: its document type declarations and external subsets are parsed.
+  PUBLIC XMLP_XMLCONF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/unittests/xmlconf"
 )
 gtest_discover_tests(xmlpgtest_dtd)
 
