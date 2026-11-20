@@ -949,12 +949,14 @@ TYPED_TEST( DtdTest, CursorDoctype )
     EXPECT_EQ( StrNarrow( doc.m_cursor.GetDtd().m_strRootName ), "a" );
     EXPECT_FALSE( doc.m_cursor.GetDtd().m_fHasInternalSubset );
   }
-  // An entity which has markup is not one of the document's entities yet: a reference to it is to an unknown entity.
+  // An entity which has markup: what it has is content of the document where it is referenced - see EntitiesWithMarkup below.
   {
     CursorDocument< TyChar > doc( "<!DOCTYPE a [<!ENTITY m '<b/>'>]><a>x &m; y</a>" );
     ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
     ASSERT_TRUE( doc.m_cursor.FMoveDown() );
-    EXPECT_ANY_THROW( doc.StrContent() );
+    EXPECT_EQ( StrNarrow( doc.StrContent() ), "x " ); // Up to its first sub-tag - which is the entity's.
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( StrNarrow( doc.m_cursor.SvTagCur() ), "b" );
   }
   // Not well formed: the errors of the DTD are the errors of the document.
   EXPECT_NE( CursorDocument< TyChar >( "<!DOCTYPE a [<!ELEMENT a (b,c|d)>]><a/>" ).m_strError.find( "The DTD is not well formed" ), std::string::npos );
@@ -2398,6 +2400,161 @@ TEST( DtdExternalFiles, FilesInTheirEncodings )
   fs::remove_all( pathDir, ec );
 }
 
+// General entities whose replacement text is not text alone - 4.4.2: a reference in content to such an entity is replaced
+//  by the text, which is content of the document: its tags are tags of the document, and the character data around
+//  the reference and that of the entity are the character data of the element which they are in.
+TYPED_TEST( DtdTest, EntitiesWithMarkup )
+{
+  typedef TypeParam TyChar;
+  typedef std::conditional_t< sizeof( TyChar ) == sizeof( char8_t ), char32_t, char8_t > TyCharOther;
+  // The document with its entities is the same document as _pszExpanded - which has no DTD - read without any.
+  auto DifferenceFromExpanded = []( const char * _pszDocument, const char * _pszExpanded )
+  {
+    return StrDifference< TyChar, true, TyCharOther, false >( _pszDocument, _pszExpanded );
+  };
+  // What reading all of the document throws - empty if nothing.
+  auto ErrorReading = []( const char * _pszDocument ) -> std::string
+  {
+    const std::string strDifference = StrDifference< TyChar, true, TyChar, true >( _pszDocument, _pszDocument );
+    return strDifference;
+  };
+  static const char s_szDoctype[] =
+    "<!DOCTYPE doc [\n"
+    "<!ENTITY e 'in <b a=\"1\">bold &amp; <i/></b> out'>\n"
+    "<!ENTITY t 'text'>\n"
+    "<!ENTITY inner '<i>x&t;</i>'>\n"
+    "<!ENTITY outer 'a &inner; b &inner;'>\n"
+    "<!ENTITY built \"&#60;foo>&#38;amp;&#60;/foo>\">\n"
+    "<!ENTITY empty '<!-- nothing -->'>\n"
+    "]>\n";
+  auto Doc = []( const char * _pszRoot ) { return std::string( s_szDoctype ) + _pszRoot; };
+  EXPECT_EQ( DifferenceFromExpanded( Doc( "<doc>before &e; after &t; end</doc>" ).c_str(), "<doc>before in <b a='1'>bold &amp; <i/></b> out after text end</doc>" ), "" );
+  // At the beginning and at the end of an element, one after another, and all that an element has.
+  EXPECT_EQ( DifferenceFromExpanded( Doc( "<doc>&e;&e;<p>&inner;</p></doc>" ).c_str(),
+    "<doc>in <b a='1'>bold &amp; <i/></b> outin <b a='1'>bold &amp; <i/></b> out<p><i>xtext</i></p></doc>" ), "" );
+  // An entity whose text refers to another which has markup.
+  EXPECT_EQ( DifferenceFromExpanded( Doc( "<doc>&outer;</doc>" ).c_str(), "<doc>a <i>xtext</i> b <i>xtext</i></doc>" ), "" );
+  // Markup which the literal of the entity has as character references ( 4.5 ).
+  EXPECT_EQ( DifferenceFromExpanded( Doc( "<doc>&built;</doc>" ).c_str(), "<doc><foo>&amp;</foo></doc>" ), "" );
+  // The text may be anything which content may have.
+  EXPECT_EQ( DifferenceFromExpanded( Doc( "<doc>x&empty;y</doc>" ).c_str(), "<doc>x<!-- nothing -->y</doc>" ), "" );
+
+  // Written from the cursor with its document type declaration the document is as it was: the references are written
+  //  and not what the entities have. Without the declaration what they have is what is written.
+  {
+    const std::string strDocument = Doc( "<doc>before &e; after &t; <p>&outer;</p>&built; end</doc>\n" );
+    {
+      CursorDocument< TyChar > doc( strDocument.c_str() );
+      ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+      std::basic_string< TyChar > strWritten;
+      ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+      EXPECT_EQ( StrNarrowExact( strWritten ), strDocument );
+    }
+    {
+      CursorDocument< TyChar > doc( strDocument.c_str() );
+      ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+      std::basic_string< TyChar > strWritten;
+      ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc, false ) );
+      const std::string strWithout = StrNarrowExact( strWritten );
+      EXPECT_EQ( strWithout,
+        "\n<doc>before in <b a=\"1\">bold &amp; <i/></b> out after text <p>a <i>xtext</i> b <i>xtext</i></p><foo>&amp;</foo> end</doc>\n" );
+      EXPECT_EQ( DifferenceFromExpanded( strDocument.c_str(), strWithout.c_str() ), "" );
+    }
+  }
+  // The tokens which mark what an entity has are among the content - and one may move within what an entity has and
+  //  pass over the rest of it.
+  {
+    typedef typename CursorDocument< TyChar >::_TyXmlTraits::_TyXmlToken TyXmlToken;
+    CursorDocument< TyChar > doc( Doc( "<doc><sec>s &e; t</sec><last/></doc>" ).c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() ); // doc
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() ); // sec
+    std::string strContent;
+    doc.m_cursor.ApplyAllContent(
+      [&strContent]( const TyXmlToken * _pxtBegin, const TyXmlToken * _pxtEnd )
+      {
+        for ( ; _pxtEnd != _pxtBegin; ++_pxtBegin )
+        {
+          std::basic_string< TyChar > str;
+          _pxtBegin->GetLexToken().GetString( str );
+          strContent += ( _pxtBegin->FIsEntityContentBegin() ? "{" : _pxtBegin->FIsEntityContentEnd() ? "}" : "[" ) + StrNarrow( str ) + ( _pxtBegin->FIsEntityContentBegin() || _pxtBegin->FIsEntityContentEnd() ? "" : "]" );
+        }
+      } );
+    EXPECT_EQ( strContent, "[s ]{e[in ]" );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() ); // b - of the entity.
+    EXPECT_EQ( StrNarrow( doc.m_cursor.SvTagCur() ), "b" );
+    EXPECT_EQ( doc.StrAttributes(), "a=\"1\"" );
+    ASSERT_TRUE( doc.m_cursor.FMoveUp() ); // sec
+    ASSERT_TRUE( doc.m_cursor.FNextTag() ); // Past the rest of sec - the rest of the entity and what follows it - to last.
+    EXPECT_EQ( StrNarrow( doc.m_cursor.SvTagCur() ), "last" );
+  }
+  // Read into a tree.
+  {
+    typedef typename CursorDocument< TyChar >::_TyXmlTraits TyXmlTraits;
+    CursorDocument< TyChar > doc( Doc( "<doc>before &e; after <p>&outer;</p></doc>" ).c_str() );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    auto prXmlDoc = xml_document< TyXmlTraits >::PrCreateXmlDocument();
+    ASSERT_NO_THROW( prXmlDoc.first->FromXmlStream( doc.m_cursor, prXmlDoc.second ) );
+  }
+
+  // The text of an entity is to match content [43]: an element which begins in it ends in it, and it doesn't end one
+  //  which begins outside of it.
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ENTITY e '<b>'>]><doc>&e;</b></doc>" ).find( "doesn't end in it" ), std::string::npos );
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ENTITY e '</b>'>]><doc><b>&e;</doc>" ).find( "doesn't begin in it" ), std::string::npos );
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ENTITY e '<b>x</b><c'>]><doc>&e;</doc>" ).find( "not well formed as content" ), std::string::npos );
+  // WFC: No Recursion.
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ENTITY a '<x>&b;</x>'><!ENTITY b 'y &a;'>]><doc>&a;</doc>" ).find( "reference to itself" ), std::string::npos );
+  // WFC: Parsed Entity.
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!NOTATION n SYSTEM 'n'><!ENTITY u SYSTEM 'u.gif' NDATA n>]><doc>&u;</doc>" ).find( "unparsed entity" ), std::string::npos );
+  // Outside of the document's element there is no reference.
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ENTITY e '<b/>'>]>&e;<doc/>" ), "" );
+
+  // Validation: what the entity has is what the element has.
+  {
+    static const char s_szValidate[] = "<!DOCTYPE doc [<!ELEMENT doc (b, c?)><!ELEMENT b EMPTY><!ELEMENT c (#PCDATA)><!ENTITY e '<b/>'><!ENTITY f '<c>x</c>'>]>";
+    auto Validate = []( const char * _pszRoot )
+    {
+      return StrValidate< TyChar >( ( std::string( s_szValidate ) + _pszRoot ).c_str() );
+    };
+    EXPECT_EQ( Validate( "<doc>&e;</doc>" ), "" );
+    EXPECT_EQ( Validate( "<doc>&e;&f;</doc>" ), "" );
+    EXPECT_EQ( Validate( "<doc>&e;&f;</doc>" ), StrValidate< TyChar >( ( std::string( s_szValidate ) + "<doc>&e;&f;</doc>" ).c_str(), true ) );
+    EXPECT_EQ( Validate( "<doc>&f;</doc>" ), "The element <c> may not be here within the element <doc>: its content model has <b>.\n" );
+    EXPECT_EQ( Validate( "<doc>&e;&e;</doc>" ), "The element <b> may not be here within the element <doc>: its content model has <c> or the end of the element.\n" );
+  }
+
+  // An external parsed entity [78]: read if the parser has the means - its text declaration is not part of its text.
+  {
+    static const char s_szDocument[] = "<!DOCTYPE doc [<!ENTITY chap SYSTEM 'sub/chap.xml'><!ENTITY t 'text'>]><doc>one &chap; two</doc>";
+    TestEntities entities;
+    entities.m_mapEntities[ "sub/chap.xml" ] = "<?xml version='1.0' encoding='utf-8'?><chapter n='1'>&t; of it</chapter> and more";
+    {
+      CursorDocument< TyChar > doc( s_szDocument, entities.Resolver< TyChar >(), "doc.xml" );
+      CursorDocument< TyCharOther, false > docExpanded( "<doc>one <chapter n='1'>text of it</chapter> and more two</doc>" );
+      ASSERT_TRUE( doc.FOpened() && docExpanded.FOpened() ) << doc.m_strError;
+      std::string strDifference;
+      EXPECT_TRUE( FCompareXmlDocuments( doc.m_cursor, docExpanded.m_cursor, xml_compare_options(), &strDifference ) ) << strDifference;
+      EXPECT_EQ( entities.m_rgstrAsked, ( std::vector< std::string >{ "sub/chap.xml <- doc.xml" } ) );
+    }
+    {
+      CursorDocument< TyChar > doc( s_szDocument, entities.Resolver< TyChar >(), "doc.xml" );
+      ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+      std::basic_string< TyChar > strWritten;
+      ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+      EXPECT_EQ( StrNarrowExact( strWritten ), s_szDocument );
+    }
+    // Without the means it is not read: the reference is one to an entity which there is no text for, and a document
+    //  which is being validated is not all validated.
+    {
+      CursorDocument< TyChar, true, true > doc( "<!DOCTYPE doc [<!ELEMENT doc ANY><!ENTITY chap SYSTEM 'sub/chap.xml'>]><doc>one &chap; two</doc>" );
+      ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+      ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+      EXPECT_ANY_THROW( doc.StrContent() );
+      EXPECT_TRUE( doc.m_cursor.FValidationIncomplete() );
+    }
+  }
+}
+
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.
 // The suite tests whole documents and we only have the DTD as yet, so what is tested is what can be said of the DTD alone:
 //  - WellFormedDocuments: the document type declaration of every document which the suite says is well formed - valid or
@@ -2773,11 +2930,10 @@ TEST( DtdConformance, ValidAndInvalidDocuments )
   }
   if ( !nValidJudged && !nInvalidJudged && !nNotJudged )
     return; // The suite is not here.
-  // Those which are judged - so that it is noticed if they no longer are. 284, 126 and 15 when this was written: those
-  //  which aren't refer to an entity whose text has markup or is external, or are not in UTF-8.
-  EXPECT_GE( nValidJudged, 284u );
+  // Those which are judged - so that it is noticed if they no longer are.
+  EXPECT_GE( nValidJudged, 293u );
   EXPECT_GE( nInvalidJudged, 126u );
-  EXPECT_LE( nNotJudged, 15u );
+  EXPECT_LE( nNotJudged, 6u ); // 293, 126 and 6 when this was written: those are not in UTF-8 - and one has an attribute named ':'.
 }
 
 // The external subsets of the suite are read by xml_dtd_parser - with the external parameter entities which they refer
