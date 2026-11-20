@@ -1,0 +1,289 @@
+# The tests of the W3C XML Conformance Test Suite which xmlp is known not to pass - see DtdConformance/Suite in xmlpgtest_dtd.cpp.
+# A line is: how the document was read, the ID of the test in the catalog of the suite, and why. How it was read:
+#  V   by a validating cursor with its external entities - the document as it is.
+#  N   by a cursor which doesn't validate, without its external entities.
+#  C   what is read compared with the canonical form which the suite has of the document.
+#  R   what the writer writes from it, read again, compared with the document.
+#  16  as V, the document converted to UTF-16.   32  as V, converted to UTF-32.
+# The test fails if a document which is not listed fails - and if one which is listed no longer does: then its line is to be taken away.
+V	rmt-e2e-27	a character which is not a Char [2] is accepted
+N	rmt-e2e-27	a character which is not a Char [2] is accepted
+16	rmt-e2e-27	a character which is not a Char [2] is accepted
+32	rmt-e2e-27	a character which is not a Char [2] is accepted
+V	rmt-e2e-61	a character which is not a Char [2] is accepted
+N	rmt-e2e-61	a character which is not a Char [2] is accepted
+V	rmt-e3e-13	a reference to an entity which is not declared throws when its text is asked for - also where that is a matter of validity alone
+N	rmt-e3e-13	a reference to an entity which is not declared throws when its text is asked for - also where that is a matter of validity alone
+16	rmt-e3e-13	a reference to an entity which is not declared throws when its text is asked for - also where that is a matter of validity alone
+32	rmt-e3e-13	a reference to an entity which is not declared throws when its text is asked for - also where that is a matter of validity alone
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an01.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an01.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an02.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an02.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an03.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an03.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an04.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an04.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an05.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an05.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an06.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an06.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an07.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an07.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an08.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an08.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an09.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an09.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an10.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an10.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an11.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an11.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an12.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an12.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an13.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an13.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an14.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an14.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an15.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an15.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an16.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an16.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an17.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an17.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an18.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an18.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an19.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an19.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an20.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an20.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an21.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an21.xml	a character which is not a name character [4], [4a] is accepted in a name
+16	x-ibm-1-0.5-not-wf-P04a-ibm04an21.xml	a character which is not a name character [4], [4a] is accepted in a name
+32	x-ibm-1-0.5-not-wf-P04a-ibm04an21.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an22.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an22.xml	a character which is not a name character [4], [4a] is accepted in a name
+16	x-ibm-1-0.5-not-wf-P04a-ibm04an22.xml	a character which is not a name character [4], [4a] is accepted in a name
+32	x-ibm-1-0.5-not-wf-P04a-ibm04an22.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an23.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an23.xml	a character which is not a name character [4], [4a] is accepted in a name
+16	x-ibm-1-0.5-not-wf-P04a-ibm04an23.xml	a character which is not a name character [4], [4a] is accepted in a name
+32	x-ibm-1-0.5-not-wf-P04a-ibm04an23.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an24.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an24.xml	a character which is not a name character [4], [4a] is accepted in a name
+16	x-ibm-1-0.5-not-wf-P04a-ibm04an24.xml	a character which is not a name character [4], [4a] is accepted in a name
+32	x-ibm-1-0.5-not-wf-P04a-ibm04an24.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an25.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an25.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an26.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an26.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an27.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an27.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04a-ibm04an28.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04a-ibm04an28.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n02.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n02.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n03.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n03.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n04.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n04.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n05.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n05.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n06.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n06.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n07.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n07.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n08.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n08.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n09.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n09.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n10.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n10.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n11.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n11.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n12.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n12.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n13.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n13.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n14.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n14.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n15.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n15.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n16.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n16.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n17.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n17.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n18.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n18.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n19.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n19.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n20.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n20.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n21.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n21.xml	a character which is not a name character [4], [4a] is accepted in a name
+16	x-ibm-1-0.5-not-wf-P04-ibm04n21.xml	a character which is not a name character [4], [4a] is accepted in a name
+32	x-ibm-1-0.5-not-wf-P04-ibm04n21.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n22.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n22.xml	a character which is not a name character [4], [4a] is accepted in a name
+16	x-ibm-1-0.5-not-wf-P04-ibm04n22.xml	a character which is not a name character [4], [4a] is accepted in a name
+32	x-ibm-1-0.5-not-wf-P04-ibm04n22.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n23.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n23.xml	a character which is not a name character [4], [4a] is accepted in a name
+16	x-ibm-1-0.5-not-wf-P04-ibm04n23.xml	a character which is not a name character [4], [4a] is accepted in a name
+32	x-ibm-1-0.5-not-wf-P04-ibm04n23.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n24.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n24.xml	a character which is not a name character [4], [4a] is accepted in a name
+16	x-ibm-1-0.5-not-wf-P04-ibm04n24.xml	a character which is not a name character [4], [4a] is accepted in a name
+32	x-ibm-1-0.5-not-wf-P04-ibm04n24.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n25.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n25.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n26.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n26.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n27.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n27.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P04-ibm04n28.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P04-ibm04n28.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P05-ibm05n02.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P05-ibm05n02.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P05-ibm05n03.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P05-ibm05n03.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P05-ibm05n04.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P05-ibm05n04.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P05-ibm05n05.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P05-ibm05n05.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	x-ibm-1-0.5-not-wf-P05-ibm05n06.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	x-ibm-1-0.5-not-wf-P05-ibm05n06.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	ibm-not-wf-P02-ibm02n30.xml	a character which is not a Char [2] is accepted
+N	ibm-not-wf-P02-ibm02n30.xml	a character which is not a Char [2] is accepted
+16	ibm-not-wf-P02-ibm02n30.xml	a character which is not a Char [2] is accepted
+32	ibm-not-wf-P02-ibm02n30.xml	a character which is not a Char [2] is accepted
+V	ibm-not-wf-P02-ibm02n31.xml	a character which is not a Char [2] is accepted
+N	ibm-not-wf-P02-ibm02n31.xml	a character which is not a Char [2] is accepted
+16	ibm-not-wf-P02-ibm02n31.xml	a character which is not a Char [2] is accepted
+32	ibm-not-wf-P02-ibm02n31.xml	a character which is not a Char [2] is accepted
+V	ibm-not-wf-P02-ibm02n32.xml	a character which is not a Char [2] is accepted
+N	ibm-not-wf-P02-ibm02n32.xml	a character which is not a Char [2] is accepted
+V	ibm-not-wf-P02-ibm02n33.xml	a character which is not a Char [2] is accepted
+N	ibm-not-wf-P02-ibm02n33.xml	a character which is not a Char [2] is accepted
+V	ibm-not-wf-P85-ibm85n01.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	ibm-not-wf-P85-ibm85n01.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	ibm-not-wf-P85-ibm85n02.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	ibm-not-wf-P85-ibm85n02.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	ibm-not-wf-P89-ibm89n01.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	ibm-not-wf-P89-ibm89n01.xml	a character which is not a name character [4], [4a] is accepted in a name
+V	ibm-not-wf-P89-ibm89n02.xml	a character which is not a name character [4], [4a] is accepted in a name
+N	ibm-not-wf-P89-ibm89n02.xml	a character which is not a name character [4], [4a] is accepted in a name
+C	ibm-valid-P28-ibm28v02.xml	a processing instruction within the DTD is not among what the cursor gives
+C	ibm-valid-P29-ibm29v01.xml	a processing instruction within the DTD is not among what the cursor gives
+C	ibm-valid-P29-ibm29v02.xml	a processing instruction within the DTD is not among what the cursor gives
+V	o-p02fail1	a character which is not a Char [2] is accepted
+N	o-p02fail1	a character which is not a Char [2] is accepted
+V	o-p02fail10	a character which is not a Char [2] is accepted
+N	o-p02fail10	a character which is not a Char [2] is accepted
+V	o-p02fail11	a character which is not a Char [2] is accepted
+N	o-p02fail11	a character which is not a Char [2] is accepted
+V	o-p02fail12	a character which is not a Char [2] is accepted
+N	o-p02fail12	a character which is not a Char [2] is accepted
+V	o-p02fail13	a character which is not a Char [2] is accepted
+N	o-p02fail13	a character which is not a Char [2] is accepted
+V	o-p02fail14	a character which is not a Char [2] is accepted
+N	o-p02fail14	a character which is not a Char [2] is accepted
+V	o-p02fail15	a character which is not a Char [2] is accepted
+N	o-p02fail15	a character which is not a Char [2] is accepted
+V	o-p02fail16	a character which is not a Char [2] is accepted
+N	o-p02fail16	a character which is not a Char [2] is accepted
+V	o-p02fail17	a character which is not a Char [2] is accepted
+N	o-p02fail17	a character which is not a Char [2] is accepted
+V	o-p02fail18	a character which is not a Char [2] is accepted
+N	o-p02fail18	a character which is not a Char [2] is accepted
+V	o-p02fail19	a character which is not a Char [2] is accepted
+N	o-p02fail19	a character which is not a Char [2] is accepted
+V	o-p02fail2	a character which is not a Char [2] is accepted
+N	o-p02fail2	a character which is not a Char [2] is accepted
+V	o-p02fail20	a character which is not a Char [2] is accepted
+N	o-p02fail20	a character which is not a Char [2] is accepted
+V	o-p02fail21	a character which is not a Char [2] is accepted
+N	o-p02fail21	a character which is not a Char [2] is accepted
+V	o-p02fail22	a character which is not a Char [2] is accepted
+N	o-p02fail22	a character which is not a Char [2] is accepted
+V	o-p02fail23	a character which is not a Char [2] is accepted
+N	o-p02fail23	a character which is not a Char [2] is accepted
+V	o-p02fail24	a character which is not a Char [2] is accepted
+N	o-p02fail24	a character which is not a Char [2] is accepted
+V	o-p02fail25	a character which is not a Char [2] is accepted
+N	o-p02fail25	a character which is not a Char [2] is accepted
+V	o-p02fail26	a character which is not a Char [2] is accepted
+N	o-p02fail26	a character which is not a Char [2] is accepted
+V	o-p02fail27	a character which is not a Char [2] is accepted
+N	o-p02fail27	a character which is not a Char [2] is accepted
+V	o-p02fail28	a character which is not a Char [2] is accepted
+N	o-p02fail28	a character which is not a Char [2] is accepted
+V	o-p02fail29	a character which is not a Char [2] is accepted
+N	o-p02fail29	a character which is not a Char [2] is accepted
+V	o-p02fail3	a character which is not a Char [2] is accepted
+N	o-p02fail3	a character which is not a Char [2] is accepted
+V	o-p02fail30	a character which is not a Char [2] is accepted
+N	o-p02fail30	a character which is not a Char [2] is accepted
+V	o-p02fail31	a character which is not a Char [2] is accepted
+N	o-p02fail31	a character which is not a Char [2] is accepted
+V	o-p02fail4	a character which is not a Char [2] is accepted
+N	o-p02fail4	a character which is not a Char [2] is accepted
+V	o-p02fail5	a character which is not a Char [2] is accepted
+N	o-p02fail5	a character which is not a Char [2] is accepted
+V	o-p02fail6	a character which is not a Char [2] is accepted
+N	o-p02fail6	a character which is not a Char [2] is accepted
+V	o-p02fail7	a character which is not a Char [2] is accepted
+N	o-p02fail7	a character which is not a Char [2] is accepted
+V	o-p02fail8	a character which is not a Char [2] is accepted
+N	o-p02fail8	a character which is not a Char [2] is accepted
+V	o-p02fail9	a character which is not a Char [2] is accepted
+N	o-p02fail9	a character which is not a Char [2] is accepted
+V	o-p05fail4	a character which is not a name character [4], [4a] is accepted in a name
+N	o-p05fail4	a character which is not a name character [4], [4a] is accepted in a name
+V	o-p05fail5	a character which is not a name character [4], [4a] is accepted in a name
+N	o-p05fail5	a character which is not a name character [4], [4a] is accepted in a name
+V	not-wf-sa-030	a character which is not a Char [2] is accepted
+N	not-wf-sa-030	a character which is not a Char [2] is accepted
+16	not-wf-sa-030	a character which is not a Char [2] is accepted
+32	not-wf-sa-030	a character which is not a Char [2] is accepted
+V	not-wf-sa-033	a character which is not a Char [2] is accepted
+N	not-wf-sa-033	a character which is not a Char [2] is accepted
+16	not-wf-sa-033	a character which is not a Char [2] is accepted
+32	not-wf-sa-033	a character which is not a Char [2] is accepted
+V	not-wf-sa-166	a character which is not a Char [2] is accepted
+N	not-wf-sa-166	a character which is not a Char [2] is accepted
+16	not-wf-sa-166	a character which is not a Char [2] is accepted
+32	not-wf-sa-166	a character which is not a Char [2] is accepted
+V	not-wf-sa-167	a character which is not a Char [2] is accepted
+N	not-wf-sa-167	a character which is not a Char [2] is accepted
+16	not-wf-sa-167	a character which is not a Char [2] is accepted
+32	not-wf-sa-167	a character which is not a Char [2] is accepted
+V	not-wf-sa-168	a character which is not a Char [2] is accepted
+N	not-wf-sa-168	a character which is not a Char [2] is accepted
+16	not-wf-sa-168	a character which is not a Char [2] is accepted
+32	not-wf-sa-168	a character which is not a Char [2] is accepted
+V	not-wf-sa-169	a character which is not a Char [2] is accepted
+N	not-wf-sa-169	a character which is not a Char [2] is accepted
+16	not-wf-sa-169	a character which is not a Char [2] is accepted
+32	not-wf-sa-169	a character which is not a Char [2] is accepted
+V	not-wf-sa-170	a character which is not a Char [2] is accepted
+N	not-wf-sa-170	a character which is not a Char [2] is accepted
+16	not-wf-sa-170	a character which is not a Char [2] is accepted
+32	not-wf-sa-170	a character which is not a Char [2] is accepted
+V	not-wf-sa-171	a character which is not a Char [2] is accepted
+N	not-wf-sa-171	a character which is not a Char [2] is accepted
+V	not-wf-sa-172	a character which is not a Char [2] is accepted
+N	not-wf-sa-172	a character which is not a Char [2] is accepted
+V	not-wf-sa-173	a character which is not a Char [2] is accepted
+N	not-wf-sa-173	a character which is not a Char [2] is accepted
+16	not-wf-sa-173	a character which is not a Char [2] is accepted
+32	not-wf-sa-173	a character which is not a Char [2] is accepted
+V	not-wf-sa-174	a character which is not a Char [2] is accepted
+N	not-wf-sa-174	a character which is not a Char [2] is accepted
+V	not-wf-sa-175	a character which is not a Char [2] is accepted
+N	not-wf-sa-175	a character which is not a Char [2] is accepted
+16	not-wf-sa-175	a character which is not a Char [2] is accepted
+32	not-wf-sa-175	a character which is not a Char [2] is accepted
+V	not-wf-sa-177	a character which is not a Char [2] is accepted
+N	not-wf-sa-177	a character which is not a Char [2] is accepted
+16	not-wf-sa-177	a character which is not a Char [2] is accepted
+32	not-wf-sa-177	a character which is not a Char [2] is accepted

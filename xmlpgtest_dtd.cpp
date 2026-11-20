@@ -1028,11 +1028,19 @@ TYPED_TEST( DtdTest, AttributeDefaultValues )
   EXPECT_NE( lambdaError( "<!ENTITY e '<b/>'><!ATTLIST a x CDATA '&e;'>" ).find( "has a '<' in its replacement text" ), std::string::npos );
   EXPECT_NE( lambdaError( "<!ENTITY e '&#38;f;'><!ENTITY f '&#38;e;'><!ATTLIST a x CDATA '&e;'>" ).find( "contains a reference to itself" ), std::string::npos );
   EXPECT_EQ( lambdaError( "<!ENTITY e '&#38;#60;'><!ATTLIST a x CDATA '&e;'>" ), "" ); // The character '<' - not markup.
-  // An entity must be declared before the default value which refers to it: well-formedness if the document is standalone.
+  // An entity must be declared before the default value which refers to it ( 4.1 WFC: Entity Declared ): that is a matter
+  //  of well-formedness if the document is standalone - or has no external subset and no reference to a parameter entity.
   EXPECT_NE( lambdaError( "<!ATTLIST a x CDATA '&later;'><!ENTITY later 'v'>", true ).find( "refers to an entity which is not declared" ), std::string::npos );
   {
+    xml_dtd< TyChar > dtdNotWellFormed;
+    EXPECT_NE( StrReadDtd< TyChar >( "<!DOCTYPE a [<!ATTLIST a x CDATA '&later;' y CDATA 'ok'><!ENTITY later 'v'>]>", dtdNotWellFormed ).find( "refers to an entity which is not declared" ), std::string::npos );
+  }
+  // Otherwise it is a matter of validity: the declaration of the entity may be where it isn't read.
+  for ( const char * pszDoctype : { "<!DOCTYPE a SYSTEM 'a.dtd' [<!ATTLIST a x CDATA '&later;' y CDATA 'ok'><!ENTITY later 'v'>]>",
+                                    "<!DOCTYPE a [<!ATTLIST a x CDATA '&later;' y CDATA 'ok'><!ENTITY later 'v'><!ENTITY % pe ''>%pe;]>" } )
+  {
     xml_dtd< TyChar > dtdInvalid;
-    ASSERT_EQ( StrReadDtd< TyChar >( "<!DOCTYPE a [<!ATTLIST a x CDATA '&later;' y CDATA 'ok'><!ENTITY later 'v'>]>", dtdInvalid ), "" );
+    ASSERT_EQ( StrReadDtd< TyChar >( pszDoctype, dtdInvalid ), "" ) << pszDoctype;
     EXPECT_EQ( dtdInvalid.m_rgstrValidityErrors, ( std::vector< std::string >{ "The default value of attribute [x] refers to an entity which is not declared." } ) );
     EXPECT_FALSE( dtdInvalid.PGetAttDef( W( "a" ), W( "x" ) )->m_fHasDefaultValue );
     EXPECT_TRUE( dtdInvalid.PGetAttDef( W( "a" ), W( "y" ) )->m_fHasDefaultValue );
@@ -2298,11 +2306,12 @@ TYPED_TEST( DtdTest, ValidationOfExternalDeclarations )
   static const char s_szDefault[] = "<doc><item/></doc>";
   EXPECT_EQ( ValidateStandalone( s_szYes, s_szDefault ),
     "The document is declared standalone and a tag <item> has the attribute [lang] by its default - which is declared externally.\n" );
-  // A reference to an entity - in character data and in the value of an attribute.
+  // A reference to an entity which is declared externally - in character data or in the value of an attribute: in a
+  //  document which is declared standalone the entity is not declared ( 4.1 WFC: Entity Declared ) - that is an error
+  //  of well-formedness, not of validity alone.
   static const char s_szEntity[] = "<doc><item lang='&ext;'>&ext;</item></doc>";
-  EXPECT_EQ( ValidateStandalone( s_szYes, s_szEntity ),
-    "The document is declared standalone and refers to the entity [ext] - which is declared externally.\n"
-    "The document is declared standalone and refers to the entity [ext] - which is declared externally.\n" );
+  EXPECT_NE( ValidateStandalone( s_szYes, s_szEntity ).find( "is declared standalone and the value of an attribute refers to the entity [ext]" ), std::string::npos );
+  EXPECT_NE( ValidateStandalone( s_szYes, "<doc><item lang='fr'>&ext;</item></doc>" ).find( "exception:" ), std::string::npos );
   // The value of an attribute which its type makes another.
   static const char s_szNormalized[] = "<doc><item lang='x' kind=' k '/></doc>";
   EXPECT_EQ( ValidateStandalone( s_szYes, s_szNormalized ),
@@ -3482,6 +3491,95 @@ TYPED_TEST( DtdTest, NamespacesOrNotOfVariantParser )
   }
 }
 
+// What the tests of the suite found - each as a small document of its own.
+TYPED_TEST( DtdTest, FoundByTheConformanceSuite )
+{
+  typedef TypeParam TyChar;
+  typedef std::conditional_t< sizeof( TyChar ) == sizeof( char8_t ), char32_t, char8_t > TyCharOther;
+  // What reading all of the document throws - empty if nothing.
+  auto ErrorReading = []( const char * _pszDocument ) -> std::string
+  {
+    return StrDifference< TyChar, true, TyChar, true >( _pszDocument, _pszDocument );
+  };
+  // [1] document ::= prolog element Misc*: one document element - and only comments, processing instructions and
+  //  white space after it.
+  EXPECT_EQ( ErrorReading( "<doc/><!-- c --><?p i?>\n" ), "" );
+  EXPECT_NE( ErrorReading( "<doc></doc><doc></doc>" ).find( "second document element" ), std::string::npos );
+  EXPECT_NE( ErrorReading( "<doc/><doc/>" ).find( "second document element" ), std::string::npos );
+  EXPECT_NE( ErrorReading( "<doc/><!-- c --><bad/>" ), "" );
+  EXPECT_NE( ErrorReading( "<doc/></doc>" ), "" );
+  EXPECT_NE( ErrorReading( "<doc></doc>text" ), "" );
+  EXPECT_NE( ErrorReading( "<doc/><!ELEMENT e EMPTY>" ), "" );
+  EXPECT_NE( ErrorReading( "<doc/><![CDATA[x]]>" ), "" );
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ELEMENT doc EMPTY>]><doc/><!DOCTYPE doc>" ), "" );
+  // And there is one: what follows the prolog is its start tag.
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ELEMENT doc (#PCDATA)>]></doc>" ), "" );
+  EXPECT_NE( ErrorReading( "<!-- c --></doc><doc>" ), "" );
+  // [17]: the target of a processing instruction is not "xml" - an XML declaration is only at the beginning. ( The
+  //  lexical analyzer has no token for it: what was missing is that where there is no token a document doesn't just end. )
+  EXPECT_NE( ErrorReading( "<doc/>\n<?xml version='1.0'?>" ), "" );
+  EXPECT_NE( ErrorReading( "<doc><?XmL x?></doc>" ), "" );
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<?xml x?>]><doc/>" ), "" );
+  EXPECT_EQ( ErrorReading( "<doc><?xml-stylesheet x?><?xmlx y?></doc>" ), "" );
+  // 4.1 WFC: Entity Declared - a document which is declared standalone and an entity which is declared in the text
+  //  of a parameter entity: it is not declared.
+  EXPECT_NE( ErrorReading( "<?xml version='1.0' standalone='yes'?><!DOCTYPE doc [<!ENTITY % pe \"<!ENTITY e 'text'>\">%pe;]><doc>&e;</doc>" ).find( "declared standalone" ), std::string::npos );
+  EXPECT_NE( ErrorReading( "<?xml version='1.0' standalone='yes'?><!DOCTYPE doc [<!ENTITY % pe \"<!ENTITY e 'text'>\">%pe;]><doc a='&e;'/>" ).find( "declared standalone" ), std::string::npos );
+  EXPECT_EQ( ErrorReading( "<?xml version='1.0' standalone='no'?><!DOCTYPE doc [<!ENTITY % pe \"<!ENTITY e 'text'>\">%pe;]><doc a='&e;'>&e;</doc>" ), "" );
+  EXPECT_EQ( ErrorReading( "<?xml version='1.0' standalone='yes'?><!DOCTYPE doc [<!ENTITY e 'text'>]><doc a='&e;'>&e;</doc>" ), "" );
+  // The text declaration of an external entity [77]: it has an encoding, it has no "standalone", its version - if it
+  //  has one - is first and is that of the document.
+  auto ErrorOfExternalEntity = []( const char * _pszEntity ) -> std::string
+  {
+    TestEntities entities;
+    entities.m_mapEntities[ "e.xml" ] = _pszEntity;
+    CursorDocument< TyChar > docLeft( "<!DOCTYPE doc [<!ENTITY e SYSTEM 'e.xml'>]><doc>&e;</doc>", entities.Resolver< TyChar >(), "doc.xml" );
+    CursorDocument< TyChar > docRight( "<doc><x/></doc>" );
+    if ( !docLeft.FOpened() || !docRight.FOpened() )
+      return "not opened: " + docLeft.m_strError;
+    try
+    {
+      std::string strDifference;
+      return FCompareXmlDocuments( docLeft.m_cursor, docRight.m_cursor, xml_compare_options(), &strDifference ) ? std::string() : ( "different: " + strDifference );
+    }
+    catch ( std::exception const & rexc )
+    {
+      return std::string( "exception: " ) + rexc.what();
+    }
+  };
+  EXPECT_EQ( ErrorOfExternalEntity( "<x/>" ), "" );
+  EXPECT_EQ( ErrorOfExternalEntity( "<?xml encoding='UTF-8'?><x/>" ), "" );
+  EXPECT_EQ( ErrorOfExternalEntity( "<?xml version=\"1.0\" encoding = 'utf-8' ?><x/>" ), "" );
+  EXPECT_NE( ErrorOfExternalEntity( "<?xml version='1.0'?><x/>" ).find( "text declaration" ), std::string::npos ); // No encoding.
+  EXPECT_NE( ErrorOfExternalEntity( "<?xml encoding='UTF-8' version='1.0'?><x/>" ).find( "text declaration" ), std::string::npos );
+  EXPECT_NE( ErrorOfExternalEntity( "<?xml version='1.0' encoding='UTF-8' standalone='yes'?><x/>" ).find( "text declaration" ), std::string::npos );
+  EXPECT_NE( ErrorOfExternalEntity( "<?xml version='1.1' encoding='UTF-8'?><x/>" ).find( "text declaration" ), std::string::npos );
+  EXPECT_NE( ErrorOfExternalEntity( "<?xml encoding='8bit!'?><x/>" ).find( "text declaration" ), std::string::npos );
+  // Validity: a reference to an entity among the elements of element content is white space only if the replacement
+  //  text of the entity is - a reference to a character in it is not, whatever the character.
+  {
+    static const char s_szDoctype[] = "<!DOCTYPE doc [<!ELEMENT doc (e*)><!ELEMENT e EMPTY><!ENTITY sp ' '><!ENTITY ref '&#38;#32;'>]>";
+    EXPECT_EQ( StrValidate< TyChar >( ( std::string( s_szDoctype ) + "<doc><e/>&sp;<e/></doc>" ).c_str() ), "" );
+    EXPECT_EQ( StrValidate< TyChar >( ( std::string( s_szDoctype ) + "<doc><e/>&ref;<e/></doc>" ).c_str() ),
+      "The element <doc> is declared to have element content and has character data.\n" );
+  }
+  // The writer: a tag which has an attribute by the default of the DTD - whose name is then a string - and other
+  //  attributes, written in another type of character than the document's.
+  {
+    static const char s_szDocument[] =
+      "<!DOCTYPE doc [<!ATTLIST doc xml:space (default|preserve) 'preserve' d CDATA 'dflt' xmlns:p CDATA 'u' p:e CDATA 'pe'>]>"
+      "<doc a='1' b='2'><sub c='3'/></doc>";
+    for ( const bool kfWriteDoctypeDecl : { true, false } )
+    {
+      CursorDocument< TyChar > doc( s_szDocument );
+      ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+      std::basic_string< TyCharOther > strWritten;
+      ASSERT_NO_THROW( strWritten = StrWriteFromAnyCursor< TyCharOther >( doc.m_cursor, kfWriteDoctypeDecl ) ) << kfWriteDoctypeDecl;
+      EXPECT_EQ( ( StrDifference< TyChar, true, TyCharOther, true >( s_szDocument, StrNarrowExact( strWritten ).c_str() ) ), "" ) << StrNarrowExact( strWritten );
+    }
+  }
+}
+
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.
 // The suite tests whole documents and we only have the DTD as yet, so what is tested is what can be said of the DTD alone:
 //  - WellFormedDocuments: the document type declaration of every document which the suite says is well formed - valid or
@@ -4088,6 +4186,530 @@ TEST( DtdConformance, NamespacesInXml10Catalog )
   EXPECT_EQ( mapTypes[ "invalid" ], 17u );
   EXPECT_EQ( mapTypes[ "not-wf" ], 21u );
   EXPECT_EQ( mapTypes[ "error" ], 3u );
+}
+
+// The W3C XML Conformance Test Suite by its catalog - xmlconf.xml: every test of it which is for what we read.
+// The catalog is itself a document of the kind we are to read: it has an external subset - which gives its <TEST>s
+//  attributes by default - and its test cases are in external general entities whose text is content. We read it with
+//  the cursor.
+struct SuiteTest
+{
+  std::string m_strId;
+  std::string m_strPath; // The document - relative to the directory of the suite.
+  std::string m_strType; // "valid", "invalid", "not-wf" or "error".
+  std::string m_strEntities; // The external entities which are to be read for the document to be what it is: "none", "parameter", "general" or "both".
+  std::string m_strRecommendation; // "XML1.0", "NS1.0", "XML1.1", ...
+  std::string m_strEdition; // The editions of XML 1.0 which the test is for - empty: all of them.
+  std::string m_strOutput; // The canonical form of the document - relative to the directory of the suite - if there is one.
+  bool m_fNamespace{ true }; // The document is for a processor of namespaces.
+};
+void PrintTo( SuiteTest const & _rtest, std::ostream * _pos )
+{
+  *_pos << _rtest.m_strId << " ( " << _rtest.m_strPath << ", " << _rtest.m_strType << " )";
+}
+// The tests of the catalog - none if the suite is not here. _pstrError: why the catalog was not read, if it wasn't.
+std::vector< SuiteTest > RgSuiteTestsRead( std::string * _pstrError )
+{
+  typedef xml_traits< _l_transport_fixedmem< char8_t >, true, true > TyXmlTraits;
+  typedef xml_parser< TyXmlTraits > TyXmlParser;
+  std::vector< SuiteTest > rgTests;
+  const fs::path pathCatalog = fs::path( XMLP_XMLCONF_DIR ) / "xmlconf.xml";
+  std::ifstream ifs( pathCatalog, std::ios::binary );
+  if ( !ifs )
+    return rgTests;
+  std::stringstream ss;
+  ss << ifs.rdbuf();
+  const std::string strBytes = ss.str();
+  try
+  {
+    TyXmlParser xmlParser;
+    xmlParser.SetReadExternalEntityFiles();
+    const std::string strBase = pathCatalog.generic_string();
+    xmlParser.SetBaseLocation( std::u8string( strBase.begin(), strBase.end() ) );
+    typename TyXmlParser::_TyReadCursor cursor = xmlParser.OpenMemory( strBytes.data(), strBytes.size() );
+    // The attributes of the current tag.
+    auto GetAttributes = [&cursor]() -> std::map< std::string, std::string >
+    {
+      std::map< std::string, std::string > mapAttrs;
+      auto & rltokTag = cursor.GetTagCur().GetLexToken();
+      auto & rrgAttrs = rltokTag.GetValue()[ vknAttributesIdx ];
+      for ( size_t nAttr = 0; nAttr < rrgAttrs.GetSize(); ++nAttr )
+      {
+        std::u8string strName, strValue;
+        rltokTag.GetString( strName, rrgAttrs[ nAttr ][ vknNameIdx ] );
+        rltokTag.GetString( strValue, rrgAttrs[ nAttr ][ vknAttr_ValueIdx ] );
+        mapAttrs[ std::string( strName.begin(), strName.end() ) ] = std::string( strValue.begin(), strValue.end() );
+      }
+      return mapAttrs;
+    };
+    std::vector< std::string > rgstrBase; // The base of each of the tags which we are within: what the URIs of its tests are relative to.
+    auto Visit = [&]( size_t _nDepth )
+    {
+      rgstrBase.resize( _nDepth );
+      std::string strBaseCur = ( _nDepth > 1 ) ? rgstrBase[ _nDepth - 2 ] : std::string();
+      const std::u8string_view svTag = cursor.SvTagCur();
+      const std::string strTag( svTag.begin(), svTag.end() );
+      const std::map< std::string, std::string > mapAttrs = GetAttributes();
+      auto StrAttr = [&mapAttrs]( const char * _pszName ) -> std::string
+      {
+        auto cit = mapAttrs.find( _pszName );
+        return ( mapAttrs.end() == cit ) ? std::string() : cit->second;
+      };
+      if ( "TESTCASES" == strTag )
+        strBaseCur += StrAttr( "xml:base" );
+      else
+      if ( "TEST" == strTag )
+      {
+        SuiteTest test;
+        test.m_strId = StrAttr( "ID" );
+        test.m_strPath = strBaseCur + StrAttr( "URI" );
+        test.m_strType = StrAttr( "TYPE" );
+        test.m_strEntities = StrAttr( "ENTITIES" );
+        test.m_strRecommendation = StrAttr( "RECOMMENDATION" );
+        test.m_strEdition = StrAttr( "EDITION" );
+        if ( !StrAttr( "OUTPUT" ).empty() )
+          test.m_strOutput = strBaseCur + StrAttr( "OUTPUT" );
+        test.m_fNamespace = ( "no" != StrAttr( "NAMESPACE" ) );
+        rgTests.push_back( std::move( test ) );
+      }
+      rgstrBase[ _nDepth - 1 ] = strBaseCur;
+    };
+    for ( size_t nDepth = 0; ; )
+    {
+      if ( cursor.FMoveDown() )
+      {
+        Visit( ++nDepth );
+        continue;
+      }
+      if ( !nDepth )
+        break;
+      if ( cursor.FNextTag() )
+        Visit( nDepth );
+      else
+        --nDepth;
+    }
+    if ( !!_pstrError && !cursor.FIsValid() )
+      *_pstrError = "the catalog is not valid: " + ( cursor.RgValidityErrors().empty() ? ( cursor.GetDtd().m_rgstrValidityErrors.empty() ? std::string( "?" ) : cursor.GetDtd().m_rgstrValidityErrors.front() ) : cursor.RgValidityErrors().front() );
+  }
+  catch ( std::exception const & rexc )
+  {
+    if ( !!_pstrError )
+      *_pstrError = std::string( "exception: " ) + rexc.what();
+  }
+  return rgTests;
+}
+std::vector< SuiteTest > const & RgSuiteTests()
+{
+  static const std::vector< SuiteTest > s_rgTests = RgSuiteTestsRead( nullptr );
+  return s_rgTests;
+}
+
+// What reading all of a document found.
+enum ESuiteOutcome
+{
+  esoThrew, // It is not well formed - or what it is can't be read.
+  esoValid,
+  esoNotValid,
+  esoRead, // It was read and nothing says whether it is valid: it wasn't validated - or what it is depends on what wasn't read.
+  esoESuiteOutcomeCount
+};
+inline const char * PszSuiteOutcome( ESuiteOutcome _eso )
+{
+  static const char * const s_rgpsz[] = { "threw", "valid", "not valid", "read" };
+  return s_rgpsz[ _eso ];
+}
+// What an exception of ours says - "[file:line],function: what" - without where in the code it is said.
+inline std::string StrWhatWasThrown( const char * _pszWhat )
+{
+  std::string strWhat( _pszWhat );
+  const size_t knPosFunction = ( '[' == strWhat[0] ) ? strWhat.find( "]," ) : std::string::npos;
+  const size_t knPosWhat = ( std::string::npos == knPosFunction ) ? std::string::npos : strWhat.find( ": ", knPosFunction );
+  if ( std::string::npos != knPosWhat )
+    strWhat.erase( 0, knPosWhat + 2 );
+  return strWhat;
+}
+// Read all of the document of the cursor - every string of it is had - and say what it is.
+template < class t_TyCursor >
+ESuiteOutcome SuiteOutcomeOfCursor( t_TyCursor & _rcursor, bool _fValidating, std::string & _rstrWhy )
+{
+  try
+  {
+    xml_compare_options options;
+    options.m_fCompareDoctypeDecl = true;
+    _xml_compare_reader< t_TyCursor > reader( _rcursor, options );
+    _xml_compare_item item;
+    do
+    {
+      reader.GetNext( item );
+    }
+    while ( excmpEndOfDocument != item.m_excmp );
+  }
+  catch ( std::exception const & rexc )
+  {
+    _rstrWhy = StrWhatWasThrown( rexc.what() );
+    return esoThrew;
+  }
+  if ( !_fValidating )
+    return esoRead;
+  if ( !_rcursor.FHasDtd() )
+  {
+    _rstrWhy = _rcursor.RgValidityErrors().empty() ? std::string( "no document type declaration" ) : _rcursor.RgValidityErrors().front();
+    return _rcursor.RgValidityErrors().empty() ? esoRead : esoNotValid;
+  }
+  auto const & rdtd = _rcursor.GetDtd();
+  if ( !rdtd.m_rgstrValidityErrors.empty() || !_rcursor.RgValidityErrors().empty() )
+  {
+    _rstrWhy = !rdtd.m_rgstrValidityErrors.empty() ? rdtd.m_rgstrValidityErrors.front() : _rcursor.RgValidityErrors().front();
+    return esoNotValid;
+  }
+  if ( !rdtd.FAllDeclarationsRead() || _rcursor.FValidationIncomplete() )
+  {
+    _rstrWhy = "what it is depends on what is not read";
+    return esoRead;
+  }
+  return esoValid;
+}
+struct SuiteRead
+{
+  ESuiteOutcome m_eso{ esoThrew };
+  std::string m_strWhy;
+};
+// Read a document which is in UTF-8, UTF-16 or UTF-32 with the variant parser.
+//  _fValidating: by a validating cursor - otherwise by one which only supports the DTD.
+//  _fReadExternalEntities: the external entities of the document are read - they are files beside it.
+template < class t_TyXmlParserVar >
+SuiteRead SuiteReadDocument( std::string const & _rstrBytes, fs::path const & _rpath, bool _fUseXMLNamespaces, bool _fReadExternalEntities )
+{
+  SuiteRead read;
+  try
+  {
+    t_TyXmlParserVar xmlParser;
+    if ( _fReadExternalEntities )
+      xmlParser.SetReadExternalEntityFiles();
+    xmlParser.SetBaseLocation( _rpath.generic_string() );
+    xmlParser.SetUseXMLNamespaces( _fUseXMLNamespaces );
+    typename t_TyXmlParserVar::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( _rstrBytes.data(), _rstrBytes.size() );
+    read.m_eso = std::visit(
+      [&read]( auto & _tCursor ) -> ESuiteOutcome
+      {
+        return SuiteOutcomeOfCursor( _tCursor, t_TyXmlParserVar::s_kfValidating, read.m_strWhy );
+      }, cursor.GetVariant() );
+  }
+  catch ( std::exception const & rexc )
+  {
+    read.m_strWhy = StrWhatWasThrown( rexc.what() );
+    read.m_eso = esoThrew;
+  }
+  return read;
+}
+typedef xml_parser_var< xml_var_get_var_transport_t, tuple< tuple< char8_t >, tuple< char16_t >, tuple< char32_t > >, true, false > TyXmlParserVarDtdNotValidating;
+
+// The encoding which the document declares - lower case - if its bytes are of an encoding of a byte for a character
+//  of ASCII and it has an XML declaration which declares one: empty otherwise.
+std::string StrDeclaredEncodingOfDocument( std::string const & _rstrBytes )
+{
+  if ( ( _rstrBytes.size() < 6 ) || ( 0 != _rstrBytes.compare( 0, 5, "<?xml" ) ) )
+    return std::string();
+  const size_t knPosEnd = _rstrBytes.find( "?>" );
+  const size_t knPosEncoding = _rstrBytes.find( "encoding" );
+  if ( ( std::string::npos == knPosEnd ) || ( std::string::npos == knPosEncoding ) || ( knPosEncoding > knPosEnd ) )
+    return std::string();
+  const size_t knPosQuote = _rstrBytes.find_first_of( "'\"", knPosEncoding );
+  if ( ( std::string::npos == knPosQuote ) || ( knPosQuote > knPosEnd ) )
+    return std::string();
+  const size_t knPosQuoteEnd = _rstrBytes.find( _rstrBytes[ knPosQuote ], knPosQuote + 1 );
+  if ( ( std::string::npos == knPosQuoteEnd ) || ( knPosQuoteEnd > knPosEnd ) )
+    return std::string();
+  std::string strEncoding = _rstrBytes.substr( knPosQuote + 1, knPosQuoteEnd - knPosQuote - 1 );
+  for ( char & rch : strEncoding )
+    rch = (char)tolower( (unsigned char)rch );
+  return strEncoding;
+}
+
+// What is found of one test of the suite - empty strings for what is as it should be.
+struct SuiteResult
+{
+  std::string m_strSkipped; // Why the test is not for us - then nothing else is said.
+  std::string m_strValidating; // Read by a validating cursor with its external entities the document is not what the catalog says.
+  std::string m_strNotValidating; // Read by a cursor which doesn't validate and without its external entities it is not.
+  std::string m_strCanonical; // What is read is not what the canonical form of the document is.
+  std::string m_strRoundTrip; // What the writer writes from it is not the same document.
+  std::string m_strUTF16; // The document in UTF-16 - if it is in UTF-8 and doesn't declare its encoding - is not what the catalog says, read as the first is.
+  std::string m_strUTF32; // The same in UTF-32.
+};
+SuiteResult RunSuiteTest( SuiteTest const & _rtest )
+{
+  SuiteResult result;
+  if ( ( std::string::npos != _rtest.m_strRecommendation.find( "1.1" ) ) )
+  {
+    result.m_strSkipped = "for XML 1.1";
+    return result;
+  }
+  if ( !_rtest.m_strEdition.empty() && ( std::string::npos == _rtest.m_strEdition.find( '5' ) ) )
+  {
+    result.m_strSkipped = "for editions of XML 1.0 before the fifth: " + _rtest.m_strEdition;
+    return result;
+  }
+  const fs::path pathFile = fs::path( XMLP_XMLCONF_DIR ) / _rtest.m_strPath;
+  std::ifstream ifs( pathFile, std::ios::binary );
+  if ( !ifs )
+  {
+    result.m_strSkipped = "no file";
+    return result;
+  }
+  std::stringstream ss;
+  ss << ifs.rdbuf();
+  const std::string strBytes = ss.str();
+  const std::string strEncoding = StrDeclaredEncodingOfDocument( strBytes );
+  if ( !strEncoding.empty() && ( "utf-8" != strEncoding ) && ( "utf-16" != strEncoding ) && ( "us-ascii" != strEncoding ) )
+  {
+    result.m_strSkipped = "in an encoding which a document may not be in for us: " + strEncoding;
+    return result;
+  }
+  // By a validating cursor, with its external entities.
+  const SuiteRead readValidating = SuiteReadDocument< TyXmlParserVarDtd >( strBytes, pathFile, _rtest.m_fNamespace, true );
+  auto Said = []( const char * _pszExpected, SuiteRead const & _rread )
+  {
+    return std::string( "expected " ) + _pszExpected + ", " + PszSuiteOutcome( _rread.m_eso ) + ( _rread.m_strWhy.empty() ? std::string() : ( ": " + _rread.m_strWhy ) );
+  };
+  if ( ( "valid" == _rtest.m_strType ) && ( esoValid != readValidating.m_eso ) )
+    result.m_strValidating = Said( "valid", readValidating );
+  else
+  if ( ( "invalid" == _rtest.m_strType ) && ( esoNotValid != readValidating.m_eso ) )
+    result.m_strValidating = Said( "not valid", readValidating );
+  else
+  if ( ( "not-wf" == _rtest.m_strType ) && ( esoThrew != readValidating.m_eso ) )
+    result.m_strValidating = Said( "not well formed", readValidating );
+  // The same document in the other encodings: their lexical analyzers are others.
+  if ( strEncoding.empty() && ( std::string::npos == strBytes.find( '\0' ) ) )
+  {
+    auto Judge = [&]( SuiteRead const & _rread ) -> std::string
+    {
+      if ( ( "valid" == _rtest.m_strType ) && ( esoValid != _rread.m_eso ) )
+        return Said( "valid", _rread );
+      if ( ( "invalid" == _rtest.m_strType ) && ( esoNotValid != _rread.m_eso ) )
+        return Said( "not valid", _rread );
+      if ( ( "not-wf" == _rtest.m_strType ) && ( esoThrew != _rread.m_eso ) )
+        return Said( "not well formed", _rread );
+      return std::string();
+    };
+    try
+    {
+      const size_t knBOM = ( ( strBytes.size() >= 3 ) && ( 0 == strBytes.compare( 0, 3, "\xEF\xBB\xBF" ) ) ) ? 3 : 0;
+      std::u16string str16( 1, char16_t( 0xFEFF ) );
+      std::u32string str32( 1, char32_t( 0xFEFF ) );
+      {
+        std::u16string strConverted;
+        ConvertString( strConverted, (const char8_t *)strBytes.data() + knBOM, strBytes.size() - knBOM );
+        str16 += strConverted;
+      }
+      {
+        std::u32string strConverted;
+        ConvertString( strConverted, (const char8_t *)strBytes.data() + knBOM, strBytes.size() - knBOM );
+        str32 += strConverted;
+      }
+      const std::string strBytes16( (const char *)str16.data(), str16.size() * sizeof( char16_t ) );
+      const std::string strBytes32( (const char *)str32.data(), str32.size() * sizeof( char32_t ) );
+      result.m_strUTF16 = Judge( SuiteReadDocument< TyXmlParserVarDtd >( strBytes16, pathFile, _rtest.m_fNamespace, true ) );
+      result.m_strUTF32 = Judge( SuiteReadDocument< TyXmlParserVarDtd >( strBytes32, pathFile, _rtest.m_fNamespace, true ) );
+    }
+    catch ( std::exception const & )
+    {
+      // Not UTF-8 which can be converted: there is no such document in the other encodings.
+    }
+  }
+  // By one which doesn't validate, without them: then what is wrong with a document may be where it isn't read.
+  const SuiteRead readNotValidating = SuiteReadDocument< TyXmlParserVarDtdNotValidating >( strBytes, pathFile, _rtest.m_fNamespace, false );
+  // ( A reference to an entity which is declared where we didn't read - or whose text is there - is not an error, and
+  //  there is no text to give for it: asking for the string which has it throws. That is how it is: not a failure. )
+  const bool kfEntityNotRead = ( "none" != _rtest.m_strEntities ) && ( std::string::npos != readNotValidating.m_strWhy.find( "Can't find entity" ) );
+  if ( ( ( "valid" == _rtest.m_strType ) || ( "invalid" == _rtest.m_strType ) ) && ( esoThrew == readNotValidating.m_eso ) && !kfEntityNotRead )
+    result.m_strNotValidating = Said( "well formed", readNotValidating );
+  else
+  if ( ( "not-wf" == _rtest.m_strType ) && ( "none" == _rtest.m_strEntities ) && ( esoThrew != readNotValidating.m_eso ) )
+    result.m_strNotValidating = Said( "not well formed", readNotValidating );
+  if ( esoThrew == readValidating.m_eso )
+    return result;
+  // The canonical form: the document as it is read is that document - which has no DTD and no comments.
+  if ( !_rtest.m_strOutput.empty() )
+  {
+    try
+    {
+      std::ifstream ifsOutput( fs::path( XMLP_XMLCONF_DIR ) / _rtest.m_strOutput, std::ios::binary );
+      std::stringstream ssOutput;
+      ssOutput << ifsOutput.rdbuf();
+      const std::string strOutput = ssOutput.str();
+      TyXmlParserVarDtd xmlParser;
+      xmlParser.SetReadExternalEntityFiles();
+      xmlParser.SetBaseLocation( pathFile.generic_string() );
+      xmlParser.SetUseXMLNamespaces( _rtest.m_fNamespace );
+      TyXmlParserVarDtd::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
+      TyXmlParserVarDtdNotValidating xmlParserOutput;
+      xmlParserOutput.SetUseXMLNamespaces( _rtest.m_fNamespace );
+      TyXmlParserVarDtdNotValidating::_TyReadCursorVar cursorOutput = xmlParserOutput.OpenMemoryVar( strOutput.data(), strOutput.size() );
+      xml_compare_options options;
+      options.m_fCompareComments = false;
+      std::string strDifference;
+      if ( !FCompareXmlDocuments( cursor, cursorOutput, options, &strDifference ) )
+        result.m_strCanonical = strDifference.empty() ? std::string( "another document" ) : strDifference;
+    }
+    catch ( std::exception const & rexc )
+    {
+      result.m_strCanonical = std::string( "exception: " ) + rexc.what();
+    }
+  }
+  // Written from a cursor - and what was written is read: it is to be the same document.
+  try
+  {
+    std::string strWritten;
+    {
+      TyXmlParserVarDtd xmlParser;
+      xmlParser.SetReadExternalEntityFiles();
+      xmlParser.SetBaseLocation( pathFile.generic_string() );
+      xmlParser.SetUseXMLNamespaces( _rtest.m_fNamespace );
+      TyXmlParserVarDtd::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
+      const std::u8string strWritten8 = StrWriteFromAnyCursor< char8_t >( cursor );
+      strWritten.assign( strWritten8.begin(), strWritten8.end() );
+    }
+    TyXmlParserVarDtd xmlParser;
+    xmlParser.SetReadExternalEntityFiles();
+    xmlParser.SetBaseLocation( pathFile.generic_string() );
+    xmlParser.SetUseXMLNamespaces( _rtest.m_fNamespace );
+    TyXmlParserVarDtd::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
+    TyXmlParserVarDtd xmlParserWritten;
+    xmlParserWritten.SetReadExternalEntityFiles();
+    xmlParserWritten.SetBaseLocation( pathFile.generic_string() );
+    xmlParserWritten.SetUseXMLNamespaces( _rtest.m_fNamespace );
+    TyXmlParserVarDtd::_TyReadCursorVar cursorWritten = xmlParserWritten.OpenMemoryVar( strWritten.data(), strWritten.size() );
+    xml_compare_options options;
+    options.m_fCompareDoctypeDecl = true; // It is written as it was read.
+    std::string strDifference;
+    if ( !FCompareXmlDocuments( cursor, cursorWritten, options, &strDifference ) )
+      result.m_strRoundTrip = strDifference.empty() ? std::string( "another document" ) : strDifference;
+  }
+  catch ( std::exception const & rexc )
+  {
+    result.m_strRoundTrip = std::string( "exception: " ) + rexc.what();
+  }
+  return result;
+}
+
+// The tests of the suite which are known not to pass: unittests/xmlconf_expected_failures.txt - a line is how the
+//  document was read, the ID of the test and why: see the file. Here: how it was read, a tab and the ID.
+std::set< std::string > const & SetSuiteExpectedFailures()
+{
+  static const std::set< std::string > s_set = []()
+  {
+    std::set< std::string > set;
+    std::ifstream ifs( fs::path( XMLP_XMLCONF_DIR ).parent_path() / "xmlconf_expected_failures.txt" );
+    for ( std::string strLine; std::getline( ifs, strLine ); )
+    {
+      if ( strLine.empty() || ( '#' == strLine[0] ) )
+        continue;
+      const size_t knPosTab = strLine.find( '\t' );
+      const size_t knPosTabSecond = ( std::string::npos == knPosTab ) ? std::string::npos : strLine.find( '\t', knPosTab + 1 );
+      if ( std::string::npos != knPosTab )
+        set.insert( strLine.substr( 0, knPosTabSecond ) );
+    }
+    return set;
+  }();
+  return s_set;
+}
+// The tests are run in groups - by where their documents are: "xmltest/not-wf", "ibm/valid", "oasis", ...
+std::string StrSuiteGroup( SuiteTest const & _rtest )
+{
+  const size_t knPosFirst = _rtest.m_strPath.find( '/' );
+  if ( std::string::npos == knPosFirst )
+    return "suite";
+  const size_t knPosSecond = _rtest.m_strPath.find( '/', knPosFirst + 1 );
+  const size_t knPosThird = ( std::string::npos == knPosSecond ) ? std::string::npos : _rtest.m_strPath.find( '/', knPosSecond + 1 );
+  // The directory of the document - no more than two of its names.
+  return _rtest.m_strPath.substr( 0, ( std::string::npos == knPosSecond ) ? knPosFirst : ( ( std::string::npos == knPosThird ) && ( 0 != _rtest.m_strPath.compare( 0, 5, "eduni" ) ) ? knPosFirst : knPosSecond ) );
+}
+std::vector< std::string > RgSuiteGroups()
+{
+  std::vector< std::string > rgGroups;
+  for ( SuiteTest const & rtest : RgSuiteTests() )
+  {
+    const std::string strGroup = StrSuiteGroup( rtest );
+    if ( rgGroups.end() == std::find( rgGroups.begin(), rgGroups.end(), strGroup ) )
+      rgGroups.push_back( strGroup );
+  }
+  return rgGroups;
+}
+
+// Every test of the catalog which is for what we read - a test of ours for each group of them. Each document is read
+//  as RunSuiteTest() reads it, and what it is found to be is to be what the catalog says - but for the documents which
+//  are listed as known not to be: those are to fail as they are listed, so that the list is what is so.
+class W3CSuite : public testing::TestWithParam< std::string >
+{
+};
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST( W3CSuite ); // The suite may not be here.
+
+TEST_P( W3CSuite, Documents )
+{
+  const std::string & rstrGroup = GetParam();
+  std::set< std::string > const & rsetExpectedFailures = SetSuiteExpectedFailures();
+  size_t nRun = 0, nSkipped = 0, nKnownFailures = 0;
+  for ( SuiteTest const & rtest : RgSuiteTests() )
+  {
+    if ( StrSuiteGroup( rtest ) != rstrGroup )
+      continue;
+    const SuiteResult result = RunSuiteTest( rtest );
+    if ( !result.m_strSkipped.empty() )
+    {
+      ++nSkipped;
+      continue;
+    }
+    ++nRun;
+    auto Check = [&]( const char * _pszHow, const char * _pszHowRead, std::string const & _rstrSaid )
+    {
+      const bool kfExpected = rsetExpectedFailures.contains( std::string( _pszHow ) + "\t" + rtest.m_strId );
+      nKnownFailures += ( kfExpected && !_rstrSaid.empty() ) ? 1 : 0;
+      if ( !_rstrSaid.empty() && !kfExpected )
+        ADD_FAILURE() << rtest.m_strId << " ( " << rtest.m_strPath << ", " << rtest.m_strType << " ) " << _pszHowRead << ": "
+                      << ( ( _rstrSaid.length() > 500 ) ? ( _rstrSaid.substr( 0, 150 ) + " ... " + _rstrSaid.substr( _rstrSaid.length() - 300 ) ) : _rstrSaid );
+      else
+      if ( _rstrSaid.empty() && kfExpected )
+        ADD_FAILURE() << rtest.m_strId << " ( " << rtest.m_strPath << " ) is listed in xmlconf_expected_failures.txt as failing [" << _pszHow
+                      << "] and no longer does: its line is to be taken away.";
+    };
+    Check( "V", "read by a validating cursor with its external entities", result.m_strValidating );
+    Check( "N", "read without validating and without its external entities", result.m_strNotValidating );
+    Check( "C", "compared with its canonical form", result.m_strCanonical );
+    Check( "R", "written and read again", result.m_strRoundTrip );
+    Check( "16", "converted to UTF-16", result.m_strUTF16 );
+    Check( "32", "converted to UTF-32", result.m_strUTF32 );
+  }
+  std::cout << "[          ] " << rstrGroup << ": " << nRun << " documents, " << nSkipped << " not for us, " << nKnownFailures << " known failures" << std::endl;
+}
+INSTANTIATE_TEST_SUITE_P( W3C, W3CSuite, testing::ValuesIn( RgSuiteGroups() ),
+  []( testing::TestParamInfo< std::string > const & _rinfo )
+  {
+    std::string strName = _rinfo.param;
+    for ( char & rch : strName )
+      if ( !isalnum( (unsigned char)rch ) )
+        rch = '_';
+    return strName;
+  } );
+// The catalog of the suite is read by the cursor: it is valid - and all of it is here.
+TEST( DtdConformance, SuiteCatalog )
+{
+  std::string strError;
+  const std::vector< SuiteTest > rgTests = RgSuiteTestsRead( &strError );
+  if ( rgTests.empty() && strError.empty() )
+    GTEST_SKIP() << "No suite at " << XMLP_XMLCONF_DIR;
+  EXPECT_EQ( strError, "" );
+  EXPECT_EQ( rgTests.size(), 2585u );
+  size_t nForUs = 0, nWithCanonicalForm = 0;
+  for ( SuiteTest const & rtest : rgTests )
+  {
+    const bool kfForUs = ( std::string::npos == rtest.m_strRecommendation.find( "1.1" ) ) && ( rtest.m_strEdition.empty() || ( std::string::npos != rtest.m_strEdition.find( '5' ) ) );
+    nForUs += kfForUs ? 1 : 0;
+    nWithCanonicalForm += ( kfForUs && !rtest.m_strOutput.empty() ) ? 1 : 0;
+  }
+  EXPECT_EQ( nForUs, 2002u ); // The others are for XML 1.1 or for the editions of XML 1.0 before the fifth.
+  EXPECT_GE( nWithCanonicalForm, 387u );
 }
 
 // The external subsets of the suite are read by xml_dtd_parser - with the external parameter entities which they refer
