@@ -5,6 +5,9 @@
 // dbien
 // 06APR2021
 
+#include <fstream>
+#include <iterator>
+
 extern std::string g_strProgramName;
 
 namespace ns_XMLGTest
@@ -45,6 +48,87 @@ protected:
     }
     return efceEncoding;
   }
+  // A document is to be in the encoding which it declares ( 4.3.3 ): the copy of a test file in an encoding declares
+  //  that encoding - by the name which the writer writes, SvCharacterEncodingName(). A file whose XML declaration names
+  //  no encoding is left as it is.
+  static void _DeclareEncodingOfFile( filesystem::path const & _rpath, const EFileCharacterEncoding _kefce, const bool _kfWithBOM )
+  {
+    std::string strBytes;
+    {
+      std::ifstream ifs( _rpath, std::ios::binary );
+      VerifyThrowSz( !!ifs, "Couldn't open [%s].", _rpath.string().c_str() );
+      strBytes.assign( std::istreambuf_iterator< char >( ifs ), std::istreambuf_iterator< char >() );
+    }
+    const bool kfLittle = ( efceUTF16LE == _kefce ) || ( efceUTF32LE == _kefce );
+    const size_t knbyChar = ( efceUTF8 == _kefce ) ? 1 : ( ( ( efceUTF16LE == _kefce ) || ( efceUTF16BE == _kefce ) ) ? 2 : 4 );
+    const size_t knbyBOM = !_kfWithBOM ? 0 : ( ( 1 == knbyChar ) ? 3 : knbyChar );
+    VerifyThrowSz( strBytes.size() >= knbyBOM, "[%s] is shorter than its byte order mark.", _rpath.string().c_str() );
+    // The code units of the text, in the order of this machine.
+    auto NCodeUnit = [&]( size_t _nby ) -> uint32_t
+    {
+      uint32_t u = 0;
+      for ( size_t n = 0; n < knbyChar; ++n )
+      {
+        const uint32_t uByte = uint8_t( strBytes[ _nby + n ] );
+        u |= uByte << ( 8 * ( kfLittle ? n : ( knbyChar - 1 - n ) ) );
+      }
+      return u;
+    };
+    std::u32string str32;
+    if ( 1 == knbyChar )
+      ConvertString( str32, (const char8_t *)strBytes.data() + knbyBOM, strBytes.size() - knbyBOM );
+    else
+    if ( 2 == knbyChar )
+    {
+      std::u16string str16;
+      for ( size_t nby = knbyBOM; nby + 1 < strBytes.size(); nby += 2 )
+        str16 += char16_t( NCodeUnit( nby ) );
+      ConvertString( str32, str16 );
+    }
+    else
+      for ( size_t nby = knbyBOM; nby + 3 < strBytes.size(); nby += 4 )
+        str32 += char32_t( NCodeUnit( nby ) );
+    if ( 0 != str32.compare( 0, 5, U"<?xml" ) )
+      return;
+    const size_t knPosEnd = str32.find( U"?>" );
+    size_t nPos = str32.find( U"encoding" );
+    if ( ( std::u32string::npos == knPosEnd ) || ( std::u32string::npos == nPos ) || ( nPos > knPosEnd ) )
+      return;
+    nPos = str32.find_first_of( U"\"'", nPos );
+    const size_t knPosClose = str32.find( str32[ nPos ], nPos + 1 );
+    VerifyThrowSz( knPosClose < knPosEnd, "The encoding declaration of [%s] doesn't end.", _rpath.string().c_str() );
+    const basic_string_view< char32_t > svName = SvCharacterEncodingName< char32_t >( _kefce );
+    if ( str32.compare( nPos + 1, knPosClose - nPos - 1, svName ) == 0 )
+      return;
+    str32.replace( nPos + 1, knPosClose - nPos - 1, svName );
+    // Written again as it was: in its encoding, with its byte order mark if it had one.
+    std::string strOut( strBytes, 0, knbyBOM );
+    auto AppendCodeUnit = [&]( uint32_t _u )
+    {
+      for ( size_t n = 0; n < knbyChar; ++n )
+        strOut += char( uint8_t( _u >> ( 8 * ( kfLittle ? n : ( knbyChar - 1 - n ) ) ) ) );
+    };
+    if ( 1 == knbyChar )
+    {
+      std::u8string str8;
+      ConvertString( str8, str32 );
+      strOut.append( (const char *)str8.data(), str8.size() );
+    }
+    else
+    if ( 2 == knbyChar )
+    {
+      std::u16string str16;
+      ConvertString( str16, str32 );
+      for ( char16_t ch : str16 )
+        AppendCodeUnit( ch );
+    }
+    else
+      for ( char32_t ch : str32 )
+        AppendCodeUnit( ch );
+    std::ofstream ofs( _rpath, std::ios::binary | std::ios::trunc );
+    VerifyThrowSz( !!ofs, "Couldn't write [%s].", _rpath.string().c_str() );
+    ofs.write( strOut.data(), std::streamsize( strOut.size() ) );
+  }
   void _ConvertFile(  const size_t _kstGenerate, filesystem::path const& _rpathBaseFile, const EFileCharacterEncoding _kefceEncoding,
                       const uint64_t _knbyLenghtBOM, const FileObj & _rkfo, _TyMapTestFiles & _rmapFileNames )
   {
@@ -60,6 +144,7 @@ protected:
     pathConvertedFile += ".xml";
     (void)NFileSeekAndThrow( _rkfo.HFileGet(), _knbyLenghtBOM, vkSeekBegin );
     ConvertFileMapped( _rkfo.HFileGet(), _kefceEncoding, pathConvertedFile.string().c_str(), efceGenerate, fWithBOM );
+    _DeclareEncodingOfFile( pathConvertedFile, efceGenerate, fWithBOM );
     VerifyThrow( _rmapFileNames.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceGenerate, fWithBOM ), pathConvertedFile.string() ) ).second );
 
   }
@@ -125,6 +210,7 @@ protected:
       path pathConvertedFile( pathBaseFile );
       pathConvertedFile += ".xml";
       ConvertFileMapped( fo.HFileGet(), efceEncoding, pathConvertedFile.string().c_str(), efceEncoding, fEncodingFromBOM );
+      _DeclareEncodingOfFile( pathConvertedFile, efceEncoding, fEncodingFromBOM );
       VerifyThrow( m_mapFileNamesTestDir.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceEncoding, fEncodingFromBOM ), pathConvertedFile.string() ) ).second );
     }
     if ( m_fHasSkipFile )
@@ -133,6 +219,7 @@ protected:
       path pathConvertedFile( pathBaseFileSkip );
       pathConvertedFile += ".xml";
       ConvertFileMapped( foSkip.HFileGet(), efceEncoding, pathConvertedFile.string().c_str(), efceEncoding, fEncodingFromBOM );
+      _DeclareEncodingOfFile( pathConvertedFile, efceEncoding, fEncodingFromBOM );
       VerifyThrow( m_mapFileNamesTestDirSkip.insert( _TyMapTestFiles::value_type( _TyKeyEncodingBOM( efceEncoding, fEncodingFromBOM ), pathConvertedFile.string() ) ).second );
     }
     // Create a directory for the base file - sans extension - this is where the output files for the given unit test will go.

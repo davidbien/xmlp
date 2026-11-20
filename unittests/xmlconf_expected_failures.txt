@@ -6,12 +6,3 @@
 #  R   what the writer writes from it, read again, compared with the document.
 #  16  as V, the document converted to UTF-16.   32  as V, converted to UTF-32.
 # The test fails if a document which is not listed fails - and if one which is listed no longer does: then its line is to be taken away.
-V	rmt-e2e-61	the encoding which the XML declaration names is not held against the encoding which is read: the tests of the copies of documents convert a document and leave its declaration
-N	rmt-e2e-61	the encoding which the XML declaration names is not held against the encoding which is read: the tests of the copies of documents convert a document and leave its declaration
-V	rmt-e3e-13	a reference to an entity which is not declared throws when its text is asked for - also where that is a matter of validity alone
-N	rmt-e3e-13	a reference to an entity which is not declared throws when its text is asked for - also where that is a matter of validity alone
-16	rmt-e3e-13	a reference to an entity which is not declared throws when its text is asked for - also where that is a matter of validity alone
-32	rmt-e3e-13	a reference to an entity which is not declared throws when its text is asked for - also where that is a matter of validity alone
-C	ibm-valid-P28-ibm28v02.xml	a processing instruction within the DTD is not among what the cursor gives
-C	ibm-valid-P29-ibm29v01.xml	a processing instruction within the DTD is not among what the cursor gives
-C	ibm-valid-P29-ibm29v02.xml	a processing instruction within the DTD is not among what the cursor gives

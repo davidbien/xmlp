@@ -177,14 +177,15 @@ protected:
       _TyXmlWriter xwWriter;
       xwWriter.SetWriteBOM( _pvtGoldenFile->first.second );
       xwWriter.SetWriteXMLDecl( !_rxrc.FPseudoXMLDecl() ); // Only write the XMLDecl if we got one in the source.
-      // For this test we won't rewrite the encoding with any new encoding value - we'll just leave it the same.
-      // The default operation (and we will test this elsewhere) will be to write the current encoding into the encoding="" statement.
+      // A document is to be in the encoding which it declares ( 4.3.3 ) - and the copy which we write is in another: the writer
+      //  writes the name of its encoding into the XML declaration, as the copies of the test file which we compare with have
+      //  it ( see XmlpTestEnvironment ). An XML declaration which names no encoding is written as it is.
       typedef typename _TyXmlWriter::_TyXMLDeclProperties _TyXMLDeclProperties;
       _TyXMLDeclProperties xdpTranslated( _rxrc.GetXMLDeclProperties() );
       
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
-      //  for encoding of course. This is the nature of the current unit test.
-      xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
+      //  for encoding of course - and the name of it. This is the nature of the current unit test.
+      xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, !xdpTranslated.m_fHasEncoding ); // Keep the XMLDecl's encoding only when it has none.
       size_t nTagsWritten;
       bool fSkippedSomething;
       if ( vpxteXmlpTestEnvironment->m_fHasSkipFile )
@@ -352,14 +353,15 @@ protected:
       _TyXmlWriter xwWriter;
       xwWriter.SetWriteBOM( _pvtGoldenFile->first.second );
       xwWriter.SetWriteXMLDecl( !_rxrc.FPseudoXMLDecl() ); // Only write the XMLDecl if we got one in the source.
-      // For this test we won't rewrite the encoding with any new encoding value - we'll just leave it the same.
-      // The default operation (and we will test this elsewhere) will be to write the current encoding into the encoding="" statement.
+      // A document is to be in the encoding which it declares ( 4.3.3 ) - and the copy which we write is in another: the writer
+      //  writes the name of its encoding into the XML declaration, as the copies of the test file which we compare with have
+      //  it ( see XmlpTestEnvironment ). An XML declaration which names no encoding is written as it is.
       typedef typename _TyXmlWriter::_TyXMLDeclProperties _TyXMLDeclProperties;
       _TyXMLDeclProperties xdpTranslated( _rxrc.GetXMLDeclProperties() );
       
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
-      //  for encoding of course. This is the nature of the current unit test.
-      xwWriter.OpenMemFile( xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
+      //  for encoding of course - and the name of it. This is the nature of the current unit test.
+      xwWriter.OpenMemFile( xdpTranslated, nullptr, !xdpTranslated.m_fHasEncoding ); // Keep the XMLDecl's encoding only when it has none.
       size_t nTagsWritten;
       bool fSkippedSomething;
       if ( vpxteXmlpTestEnvironment->m_fHasSkipFile )
@@ -678,15 +680,16 @@ protected:
       _TyXmlWriter xwWriter;
       xwWriter.SetWriteBOM( _pvtGoldenFile->first.second );
       xwWriter.SetWriteXMLDecl( !_rxrc.FPseudoXMLDecl() ); // Only write the XMLDecl if we got one in the source.
-      // For this test we won't rewrite the encoding with any new encoding value - we'll just leave it the same.
-      // The default operation (and we will test this elsewhere) will be to write the current encoding into the encoding="" statement.
+      // A document is to be in the encoding which it declares ( 4.3.3 ) - and the copy which we write is in another: the writer
+      //  writes the name of its encoding into the XML declaration, as the copies of the test file which we compare with have
+      //  it ( see XmlpTestEnvironment ). An XML declaration which names no encoding is written as it is.
       typedef typename _TyXmlWriter::_TyXMLDeclProperties _TyXMLDeclProperties;
       _TyXMLDeclProperties xdpTranslated;
       _rxrc.GetXMLDeclProperties( xdpTranslated );
       
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
-      //  for encoding of course. This is the nature of the current unit test.
-      xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
+      //  for encoding of course - and the name of it. This is the nature of the current unit test.
+      xwWriter.OpenFile( _pathOutputPath.string().c_str(), xdpTranslated, nullptr, !xdpTranslated.m_fHasEncoding ); // Keep the XMLDecl's encoding only when it has none.
       size_t nTagsWritten;
       bool fSkippedSomething;
       if ( vpxteXmlpTestEnvironment->m_fHasSkipFile )
@@ -855,15 +858,16 @@ protected:
       _TyXmlWriter xwWriter;
       xwWriter.SetWriteBOM( _pvtGoldenFile->first.second );
       xwWriter.SetWriteXMLDecl( !_rxrc.FPseudoXMLDecl() ); // Only write the XMLDecl if we got one in the source.
-      // For this test we won't rewrite the encoding with any new encoding value - we'll just leave it the same.
-      // The default operation (and we will test this elsewhere) will be to write the current encoding into the encoding="" statement.
+      // A document is to be in the encoding which it declares ( 4.3.3 ) - and the copy which we write is in another: the writer
+      //  writes the name of its encoding into the XML declaration, as the copies of the test file which we compare with have
+      //  it ( see XmlpTestEnvironment ). An XML declaration which names no encoding is written as it is.
       typedef typename _TyXmlWriter::_TyXMLDeclProperties _TyXMLDeclProperties;
       _TyXMLDeclProperties xdpTranslated;
       _rxrc.GetXMLDeclProperties( xdpTranslated );
       
       // Without an output format (and no whitespace token filter, etc) we expect the output to exactly match the input except
-      //  for encoding of course. This is the nature of the current unit test.
-      xwWriter.OpenMemFile( xdpTranslated, nullptr, true ); // true indicates "keep encoding present in XMLDecl".
+      //  for encoding of course - and the name of it. This is the nature of the current unit test.
+      xwWriter.OpenMemFile( xdpTranslated, nullptr, !xdpTranslated.m_fHasEncoding ); // Keep the XMLDecl's encoding only when it has none.
       size_t nTagsWritten;
       bool fSkippedSomething;
       if ( vpxteXmlpTestEnvironment->m_fHasSkipFile )

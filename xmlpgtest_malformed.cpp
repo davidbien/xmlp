@@ -121,6 +121,19 @@ static std::string StrEncode( std::string const & _str, EMalformedEncoding _eme 
   return strEnc;
 }
 
+// A document is to be in the encoding which it declares ( 4.3.3 ): the seed declares the one which it is encoded in.
+static std::string StrDeclaringEncoding( std::string _str, EMalformedEncoding _eme )
+{
+  const char * const kpszName = ( emeUTF8 == _eme ) ? "UTF-8" : ( ( emeUTF16 == _eme ) ? "UTF-16" : "UTF-32" );
+  for ( const char * pszDeclared : { "encoding=\"UTF-8\"", "encoding='UTF-8'" } )
+  {
+    const size_t knPos = _str.find( pszDeclared );
+    if ( std::string::npos != knPos )
+      _str.replace( knPos + 10, 5, kpszName ); // After "encoding=" and its quote.
+  }
+  return _str;
+}
+
 enum EParseResult { eprParsed, eprParseError, eprTriggerDataLeft };
 
 // Parse the variant into a document. Return the result and the exception message if any.
@@ -174,7 +187,7 @@ TEST_P( XmlpTestMalformed, NoTriggerDataLeft )
 {
   const size_t knSeed = std::get< 0 >( GetParam() );
   const EMalformedEncoding keme = (EMalformedEncoding)std::get< 1 >( GetParam() );
-  const std::string strSeed( s_rgszSeeds[ knSeed ] );
+  const std::string strSeed = StrDeclaringEncoding( s_rgszSeeds[ knSeed ], keme );
   std::string strWhat;
   // The seed itself must parse - otherwise its variants aren't testing what we think they are.
   ASSERT_EQ( eprParsed, EprParse( strSeed, keme, strWhat ) ) << "Seed [" << strSeed << "]: " << strWhat;

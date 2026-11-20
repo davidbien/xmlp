@@ -124,6 +124,33 @@ gtest_discover_tests(xmlpgtest_doccopy
 endif()
 endforeach()
 
+# The documents of the W3C tests of Namespaces in XML 1.0 which are namespace-well-formed - TYPE "valid" or "invalid" in
+#  the catalog of those tests - and have no document type declaration: the copy tests read without a DTD. Each is copied
+#  by cursorcopy and doccopy as the files of unittests/ are - their prefixes and their declarations of namespaces
+#  through the writer and the document, in each encoding. ( The tests of all of them are in xmlpgtest_dtd. )
+set( XMLNS10_DIR "${CMAKE_CURRENT_SOURCE_DIR}/unittests/xmlconf/eduni/namespaces/1.0" )
+if ( EXISTS "${XMLNS10_DIR}/rmt-ns10.xml" )
+file( READ "${XMLNS10_DIR}/rmt-ns10.xml" XMLNS10_CATALOG )
+string( REGEX MATCHALL "URI=\"[0-9]+\\.xml\" ID=\"[^\"]*\" TYPE=\"(valid|invalid)\"" XMLNS10_TESTS "${XMLNS10_CATALOG}" )
+foreach( XMLNS10_TEST ${XMLNS10_TESTS} )
+string( REGEX REPLACE "^URI=\"([0-9]+\\.xml)\".*$" "\\1" XMLNS10_FILE "${XMLNS10_TEST}" )
+file( READ "${XMLNS10_DIR}/${XMLNS10_FILE}" XMLNS10_TEXT )
+string( FIND "${XMLNS10_TEXT}" "<!DOCTYPE" XMLNS10_POS_DOCTYPE )
+if ( XMLNS10_POS_DOCTYPE EQUAL -1 )
+get_filename_component( XMLNS10_NAME ${XMLNS10_FILE} NAME_WE )
+message("Unit test of Namespaces in XML 1.0: ${XMLNS10_NAME}")
+gtest_discover_tests(xmlpgtest_cursorcopy
+                    EXTRA_ARGS  "${XMLNS10_DIR}/${XMLNS10_FILE}"
+                    TEST_SUFFIX .ns10_${XMLNS10_NAME}
+)
+gtest_discover_tests(xmlpgtest_doccopy
+                    EXTRA_ARGS  "${XMLNS10_DIR}/${XMLNS10_FILE}"
+                    TEST_SUFFIX .ns10_${XMLNS10_NAME}
+)
+endif()
+endforeach()
+endif()
+
 # Malformed-input testing of the lexical analyzer's triggers - see the comments in xmlpgtest_malformed.cpp.
 add_executable (xmlpgtest_malformed xmlpgtest_malformed.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
 target_include_directories(xmlpgtest_malformed PUBLIC

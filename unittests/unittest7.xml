@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The white space within tags - between the attributes, around their '=', before the end of a tag: it is written as it was read. -->
+<root	a="1"
+	b = '2'   c	=	"three"
+  >
+  <empty   />
+  <e x="y"	/>
+  <t  >text</t	>
+  <n:e xmlns:n="urn:n"
+       n:a = "v"
+  >more<inner/></n:e
+  >
+  <last a='1'></last>
+</root >
