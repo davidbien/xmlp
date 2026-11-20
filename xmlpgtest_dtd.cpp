@@ -2667,6 +2667,14 @@ TYPED_TEST( DtdTest, LineEnds )
       EXPECT_EQ( ( StrDifference< TyChar, true, TyCharOther, false >( s_szDocumentDtd, strWithout.c_str(), options ) ), "" );
     }
   }
+  // A #xD which a character reference put in the replacement text of a parameter entity is a character of what that
+  //  text declares - here of the literal of an entity which is within it: that literal is not text of the document.
+  {
+    CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ENTITY % pe \"<!ENTITY g 'a&#13;b'>\">%pe;<!ENTITY h 'a\r\nb'>]><doc>&g;|&h;</doc>" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_TRUE( doc.StrContent() == W( "a\rb|a\nb" ) ) << StrNarrowExact( doc.StrContent() );
+  }
   // The text of an external entity is normalized as it is had.
   {
     TestEntities entities;
@@ -3181,6 +3189,88 @@ TEST( DtdExternalFiles, DocumentsWhichAreFiles )
     EXPECT_EQ( StrReadDocumentFileVar< _l_transport_mapped >( rstrPath, s_szExpanded ), "" ) << rstrPath;
   }
   fs::remove_all( pathDir, ec );
+}
+
+// What the writer does with strings which can't be written as they are - other than those of WriterStringValues.
+TYPED_TEST( DtdTest, WriterStringsOfSectionsAndDeclarations )
+{
+  typedef TypeParam TyChar;
+  typedef CursorDocument< TyChar, false > TyCursorDocument;
+  typedef typename TyCursorDocument::_TyXmlTraits::_TyXmlToken TyXmlToken;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  // A CDATA section whose string has a #xD: as itself it would be read as the end of a line - #xA ( 2.11 ) - and there
+  //  is no reference within a section: the section is ended, the reference is written and the section is begun again.
+  auto WriteSection = [&W]( const char * _pszSection ) -> std::string
+  {
+    TyCursorDocument doc( "<doc/>" );
+    VerifyThrowSz( doc.FOpened(), "%s", doc.m_strError.c_str() );
+    TyTestXmlWriter< TyChar > xwWriter;
+    xwWriter.SetWriteBOM( false );
+    xwWriter.SetWriteXMLDecl( false );
+    xwWriter.OpenMemFile();
+    VerifyThrow( doc.m_cursor.FMoveDown() );
+    {
+      auto xwtDoc = xwWriter.StartTag( std::move( doc.m_cursor.GetTagCur() ), true );
+      xwtDoc.Commit();
+      TyXmlToken xtSection( doc.m_xmlParser.GetUserObj(), s_knTokenCDataSection );
+      xtSection.GetValue().emplaceVal( W( _pszSection ) );
+      xwWriter.WriteToken( xtSection );
+    } // The tag is ended.
+    return StrNarrowExact( StrWritten< TyChar >( xwWriter ) );
+  };
+  auto ContentReadBack = []( std::string const & _rstrWritten ) -> std::string
+  {
+    TyCursorDocument doc( _rstrWritten.c_str() );
+    if ( !doc.FOpened() || !doc.m_cursor.FMoveDown() )
+      return "not read: " + doc.m_strError;
+    return StrNarrowExact( doc.StrContent() );
+  };
+  {
+    static const char s_szSection[] = "a\rb\r\nc <&> \r";
+    const std::string strWritten = WriteSection( s_szSection );
+    EXPECT_EQ( strWritten, "<doc><![CDATA[a]]>&#13;<![CDATA[b]]>&#13;<![CDATA[\nc <&> ]]>&#13;<![CDATA[]]></doc>" );
+    EXPECT_EQ( ContentReadBack( strWritten ), s_szSection );
+  }
+  // With the "]]>" which a section can't have either.
+  {
+    static const char s_szSection[] = "x]]>\r]]>y";
+    const std::string strWritten = WriteSection( s_szSection );
+    EXPECT_EQ( strWritten, "<doc><![CDATA[x]]]]><![CDATA[>]]>&#13;<![CDATA[]]]]><![CDATA[>y]]></doc>" );
+    EXPECT_EQ( ContentReadBack( strWritten ), s_szSection );
+  }
+  EXPECT_EQ( WriteSection( "plain\ntext" ), "<doc><![CDATA[plain\ntext]]></doc>" );
+
+  // The text of a document type declaration which is a string is parsed: it must be one - all of it and nothing more.
+  auto ErrorWritingDoctype = [&W]( const char * _pszDoctype ) -> std::string
+  {
+    TyCursorDocument doc( "<doc/>" );
+    VerifyThrowSz( doc.FOpened(), "%s", doc.m_strError.c_str() );
+    TyXmlToken xtDoctype( doc.m_xmlParser.GetUserObj(), s_knTokenDoctypeDecl );
+    xtDoctype.GetValue().emplaceVal( W( _pszDoctype ) );
+    TyTestXmlWriter< TyChar > xwWriter;
+    xwWriter.SetWriteBOM( false );
+    xwWriter.SetWriteXMLDecl( false );
+    xwWriter.OpenMemFile();
+    try
+    {
+      xwWriter.WriteToken( xtDoctype );
+    }
+    catch ( std::exception const & rexc )
+    {
+      return std::string( "exception: " ) + rexc.what();
+    }
+    return ( StrNarrowExact( StrWritten< TyChar >( xwWriter ) ) == _pszDoctype ) ? std::string() : std::string( "not written as it is" );
+  };
+  EXPECT_EQ( ErrorWritingDoctype( "<!DOCTYPE doc>" ), "" );
+  EXPECT_EQ( ErrorWritingDoctype( "<!DOCTYPE doc SYSTEM 'doc.dtd' [\n<!ELEMENT doc (a,(b|c)*)>\n<!ATTLIST doc a CDATA 'v'>\n<!-- c -->\n<!ENTITY e 'text'>\n]\n>" ), "" );
+  // It begins and ends as one and isn't one.
+  EXPECT_NE( ErrorWritingDoctype( "<!DOCTYPE doc [<!ELEMENT doc (a,(b|c)*>]>" ), "" ); // A parenthesis which isn't closed.
+  EXPECT_NE( ErrorWritingDoctype( "<!DOCTYPE doc [<!ATTLIST doc a CDATA>]>" ), "" ); // No default.
+  EXPECT_NE( ErrorWritingDoctype( "<!DOCTYPE doc [<!ENTITY e 'text'>]><doc>" ), "" ); // More than the declaration.
+  EXPECT_NE( ErrorWritingDoctype( "<!DOCTYPE doc [<!ENTITY e 'text'>]> " ), "" );
+  EXPECT_NE( ErrorWritingDoctype( " <!DOCTYPE doc>" ), "" );
+  EXPECT_NE( ErrorWritingDoctype( "<!DOCTYPE doc [<!ENTITY % p '<!ELEMENT doc ANY>'><!ELEMENT a (%p;)>]>" ), "" ); // WFC: PEs in Internal Subset.
+  EXPECT_NE( ErrorWritingDoctype( "" ), "" );
 }
 
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.
