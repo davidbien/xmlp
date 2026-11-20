@@ -42,26 +42,28 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 // We might be able to use the "bitwise exclusive or" operator for this, i.e.:
 //	Char ^ ( '<' | '&' )
 // seems like a reasonable fit.
-#define lnot(x) litnotset_no_surrogates<_TyCTok>(x)
 
 // Utility and multiple use non-triggered productions:
 	_TyFinal	S = ++( l(0x20) | l(0x09) | l(0x0d) | l(0x0a) ); // [3]
 	_TyFinal	Eq = --S * l(U'=') * --S; // [25].
-	_TyFinal	Char =	l(0x09) | l(0x0a) | l(0x0d) | lr(0x020,0xd7ff) | lr(0xe000,0xfffd) | lr(0x10000,0x10ffff); // [2].
+	// The classes of characters are those of the specification - as code points, in xmlpgen.h: XmlChars() is such a class as
+	//  an expression of the characters of this encoding - without the code points of its second argument, if it has one. So
+	//  XmlChars( vrgxcprChar, U"<&" ) is any Char [2] but '<' and '&': what the specification writes as [^<&].
+	auto XmlChars = []( std::initializer_list< XmlCodePointRange > const & _rilRanges, const char32_t * _pszBut = nullptr )
+	{
+	  return RegexpOfCodePoints< _TyCTok, _TyAllocator >( _rilRanges, _pszBut );
+	};
+	_TyFinal Char = XmlChars( vrgxcprChar ); // [2]
 
-	_TyFinal NameStartChar = l(U':') | lr(U'A',U'Z') | l(U'_') | lr(U'a',U'z') | lr(0xC0,0xD6) | lr(0xD8,0xF6) // [4]
-														| lr(0xF8,0x2FF) | lr(0x370,0x37D) | lr(0x37F,0x1FFF) | lr(0x200C,0x200D) | lr(0x2070,0x218F) 
-														| lr(0x2C00,0x2FEF) | lr(0x3001,0xD7FF) | lr(0xF900,0xFDCF) | lr(0xFDF0,0xFFFD) | lr(0x10000,0xEFFFF);
-	_TyFinal NameChar = NameStartChar | l(U'-') | l(U'.') | lr(U'0',U'9') | l(0xB7) | lr(0x0300,0x036F) | lr(0x203F,0x2040);	// [4a]
+	_TyFinal NameStartChar = XmlChars( vrgxcprNameStartChar ); // [4]
+	_TyFinal NameChar = XmlChars( vrgxcprNameChar ); // [4a]
 	_TyFinal Name = NameStartChar * ~NameChar; // [5]
 	_TyFinal Names = Name * ~( S * Name ); // [6]
 	_TyFinal Nmtoken = ++NameChar;
 	_TyFinal Nmtokens = Nmtoken * ~( S * Nmtoken );
 
-	_TyFinal NameStartCharNoColon = lr(U'A',U'Z') | l(U'_') | lr(U'a',U'z') | lr(0xC0,0xD6) | lr(0xD8,0xF6) // [4]
-													| lr(0xF8,0x2FF) | lr(0x370,0x37D) | lr(0x37F,0x1FFF) | lr(0x200C,0x200D) | lr(0x2070,0x218F) 
-													| lr(0x2C00,0x2FEF) | lr(0x3001,0xD7FF) | lr(0xF900,0xFDCF) | lr(0xFDF0,0xFFFD) | lr(0x10000,0xEFFFF);
-	_TyFinal NameCharNoColon = NameStartCharNoColon | l(U'-') | l(U'.') | lr(U'0',U'9') | l(0xB7) | lr(0x0300,0x036F) | lr(0x203F,0x2040);	// [4a]
+	_TyFinal NameStartCharNoColon = XmlChars( vrgxcprNameStartChar, U":" ); // [4] of Namespaces in XML: a NameStartChar which is not a colon.
+	_TyFinal NameCharNoColon = XmlChars( vrgxcprNameChar, U":" ); // [5] of Namespaces in XML: a NameChar which is not a colon.
 	_TyFinal NCName = NameStartCharNoColon * ~NameCharNoColon;
 	_TyFinal	Prefix = NCName;
 	_TyFinal	LocalPart = NCName;
@@ -99,10 +101,10 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 	// A run of tabs and of ends of lines within the value is a piece of the value of its own: each of them is a space in
 	//  the value of the attribute ( 3.3.3 ) and the characters themselves are what the document has - see s_kdtAttrWhitespace.
 	// A state may have but one trigger leaving it so both kinds of run begin with the same trigger.
-	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ( ++lnot(U"&<\"\t\r\n") * t(TyGetTriggerCharDataEnd<_TyLexT>()) | ++( l(0x9) | l(0xA) | l(0xD) ) * t(TyGetTriggerAttWhitespaceEnd<_TyLexT>()) );
-	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ( ++lnot(U"&<\'\t\r\n") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>()) | ++( l(0x9) | l(0xA) | l(0xD) ) * t(TyGetTriggerAttWhitespaceSingleQuoteEnd<_TyLexT>()) );
-	_TyFinal	AttCharDataNoDoubleQuoteOutputValidate = ~lnot(U"&<\"");
-	_TyFinal	AttCharDataNoSingleQuoteOutputValidate = ~lnot(U"&<\'");
+	_TyFinal	_AVCharRangeNoAmperLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ( ++XmlChars( vrgxcprChar, U"&<\"\t\r\n" ) * t(TyGetTriggerCharDataEnd<_TyLexT>()) | ++( l(0x9) | l(0xA) | l(0xD) ) * t(TyGetTriggerAttWhitespaceEnd<_TyLexT>()) );
+	_TyFinal	_AVCharRangeNoAmperLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ( ++XmlChars( vrgxcprChar, U"&<\'\t\r\n" ) * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>()) | ++( l(0x9) | l(0xA) | l(0xD) ) * t(TyGetTriggerAttWhitespaceSingleQuoteEnd<_TyLexT>()) );
+	_TyFinal	AttCharDataNoDoubleQuoteOutputValidate = ~XmlChars( vrgxcprChar, U"&<\"" );
+	_TyFinal	AttCharDataNoSingleQuoteOutputValidate = ~XmlChars( vrgxcprChar, U"&<\'" );
 	// We need only record whether single or double quotes were used as a convenience to any reader/writer system that may want to duplicate the current manner of quoting.
 	_TyFinal	AttValue =	l(U'\"') * t( TyGetTriggerAttValueDoubleQuote<_TyLexT>() ) * ~( _AVCharRangeNoAmperLessDouble | Reference )  * l(U'\"') |	// [10]
 												l(U'\'') * ~( _AVCharRangeNoAmperLessSingle | Reference ) * l(U'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
@@ -123,8 +125,7 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 	_TyFinal	PITargetMeatOutputValidate = ~Char - ( ~Char * ls(U"?>") * ~Char );
 
 // Comment:
-	_TyFinal	_CharNoMinus =	l(0x09) | l(0x0a) | l(0x0d) | // [2].
-										lr(0x020,0x02c) | lr(0x02e,0xd7ff) | lr(0xe000,0xfffd) | lr(0x10000,0x10ffff);
+	_TyFinal _CharNoMinus = XmlChars( vrgxcprChar, U"-" ); // [2] - without '-'.
 	// For a comment the end trigger was messing with the production since it kept the second '-'
 	_TyFinal CommentChars = ~(_CharNoMinus | (l(U'-') * _CharNoMinus));
 	_TyFinal Comment = ls(U"<!--") * CommentChars * ls(U"-->");
@@ -142,7 +143,7 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 	// We must have at least one character for the triggers to fire correctly.
 	// We can only use an ending position on this CharData production. Triggers at the beginning of a production do not work because they would fire everytime.
 	// This requires fixing up after the fact - easy to do - but also specific to the XML parser as we must know how to fix it up correctly and that will be specific to the XML parser.
-	_TyFinal CharData = ++lnot(U"<&") - ( ~lnot(U"<&") * ls(U"]]>") * ~lnot(U"<&") );	
+	_TyFinal CharData = ++XmlChars( vrgxcprChar, U"<&" ) - ( ~XmlChars( vrgxcprChar, U"<&" ) * ls(U"]]>") * ~XmlChars( vrgxcprChar, U"<&" ) );	
 	_TyFinal CharDataWithTrigger = CharData * t(TyGetTriggerCharDataEndpoint<_TyLexT>());	
 	_TyFinal CharDataAndReferences = ++( CharDataWithTrigger | Reference );
 
@@ -229,8 +230,8 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 	_TyFinal DtdINCLUDE = ls(U"INCLUDE"); // [62]
 	_TyFinal DtdIGNORE = ls(U"IGNORE"); // [63]
 // The quoted literals - each in a DFA of its own:
-	_TyFinal SystemLiteral =	l(U'\"') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~lnot(U"\"") * t(TyGetTriggerSystemLiteralDoubleQuoteEnd<_TyLexT>()) * l(U'\"') | //[11]
-	                          l(U'\'') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~lnot(U"\'") * t(TyGetTriggerSystemLiteralSingleQuoteEnd<_TyLexT>()) * l(U'\'');
+	_TyFinal SystemLiteral =	l(U'\"') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~XmlChars( vrgxcprChar, U"\"" ) * t(TyGetTriggerSystemLiteralDoubleQuoteEnd<_TyLexT>()) * l(U'\"') | //[11]
+	                          l(U'\'') * t(TyGetTriggerSystemLiteralBegin<_TyLexT>()) * ~XmlChars( vrgxcprChar, U"\'" ) * t(TyGetTriggerSystemLiteralSingleQuoteEnd<_TyLexT>()) * l(U'\'');
 	_TyFinal PubidCharLessSingleQuote = l(0x20) | l(0xD) | l(0xA) | lr(U'a',U'z') | lr(U'A',U'Z') | lr(U'0',U'9') | lanyof(U"-()+,./:=?;!*#@$_%");
 	_TyFinal PubidChar = PubidCharLessSingleQuote | l('\''); //[13]
 	_TyFinal PubidLiteral = l(U'\"') * t(TyGetTriggerPubidLiteralBegin<_TyLexT>()) * ~PubidChar * t(TyGetTriggerPubidLiteralDoubleQuoteEnd<_TyLexT>()) * l(U'\"') | //[12]
@@ -238,8 +239,8 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 	// EntityValue [9] is recorded as AttValue [10] is - they share those triggers but they are never in the same DFA - and the
 	//  name of a parameter entity reference within it is recorded with the rest of the value.
 	_TyFinal _EVPEReference = l(U'%') * t(TyGetTriggerPEReferenceValueBegin<_TyLexT>()) * Name * t(TyGetTriggerPEReferenceValueEnd<_TyLexT>()) * l(U';');
-	_TyFinal _EVCharRangeNoPercentLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++lnot(U"%&\"") * t(TyGetTriggerCharDataEnd<_TyLexT>());
-	_TyFinal _EVCharRangeNoPercentLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++lnot(U"%&\'") * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
+	_TyFinal _EVCharRangeNoPercentLessDouble =	t(TyGetTriggerCharDataBegin<_TyLexT>()) * ++XmlChars( vrgxcprChar, U"%&\"" ) * t(TyGetTriggerCharDataEnd<_TyLexT>());
+	_TyFinal _EVCharRangeNoPercentLessSingle =	t(TyGetTriggerCharDataSingleQuoteBegin<_TyLexT>()) * ++XmlChars( vrgxcprChar, U"%&\'" ) * t(TyGetTriggerCharDataSingleQuoteEnd<_TyLexT>());
 	_TyFinal EntityValue =	l(U'\"') * t( TyGetTriggerAttValueDoubleQuote<_TyLexT>() ) * ~( _EVCharRangeNoPercentLessDouble | _EVPEReference | Reference )  * l(U'\"') |	// [9]
 	                        l(U'\'') * ~( _EVCharRangeNoPercentLessSingle | _EVPEReference | Reference ) * l(U'\''); // No need to record a single quote trigger as the lack of double quote is adequate.
 	// The AttValue [10] of the default of an attribute [60] is AttValue above.
@@ -247,7 +248,7 @@ GenerateUTF32XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 // Sections nest [64], so the '<![' and the ']]>' within the contents are tokens for the parser to count. What is between them
 //  is this token: a run of characters without a '<' or a ']', or a single '<' or ']' - which is the token only when it
 //  doesn't begin a '<![' or a ']]>' since those are longer. So Ignore is one or more of these tokens.
-	_TyFinal DtdIgnore = ++lnot(U"<]") | l(U'<') | l(U']');
+	_TyFinal DtdIgnore = ++XmlChars( vrgxcprChar, U"<]" ) | l(U'<') | l(U']');
 
 #ifndef REGEXP_NO_TRIGGERS
 	// _TyFinal Test = ++l('a') * t(TyGetTriggerStandaloneYes<_TyLexT>()) * ++l('b');

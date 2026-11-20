@@ -794,7 +794,9 @@ struct CursorDocument
   // _rresolver: how the external entities of the DTD are had - if they are to be read.
   // _pszBase: the location of the document, for the resolver.
   // _fUseXMLNamespaces: whether the document is read with Namespaces in XML.
-  explicit CursorDocument( const char * _pszText, xml_external_entity_resolver< t_TyChar > const & _rresolver = nullptr, const char * _pszBase = nullptr, bool _fUseXMLNamespaces = true )
+  // _plimits: what the document may have the parser do by its DTD - null for the parser's own.
+  explicit CursorDocument(  const char * _pszText, xml_external_entity_resolver< t_TyChar > const & _rresolver = nullptr, const char * _pszBase = nullptr, bool _fUseXMLNamespaces = true,
+                            const xml_dtd_limits * _plimits = nullptr )
   {
     if ( sizeof( t_TyChar ) > 1 )
       m_strText += t_TyChar( 0xFEFF ); // The byte order mark: how the encoding of what is in memory is known.
@@ -804,6 +806,8 @@ struct CursorDocument
       if ( !!_rresolver )
         m_xmlParser.SetExternalEntityResolver( _rresolver );
       m_xmlParser.SetUseXMLNamespaces( _fUseXMLNamespaces );
+      if ( !!_plimits )
+        m_xmlParser.SetDtdLimits( *_plimits );
       if ( !!_pszBase )
         m_xmlParser.SetBaseLocation( std::basic_string< t_TyChar >( _pszBase, _pszBase + strlen( _pszBase ) ) );
       m_cursor = m_xmlParser.OpenMemory( m_strText.data(), m_strText.length() * sizeof( t_TyChar ) );
@@ -3563,6 +3567,46 @@ TYPED_TEST( DtdTest, FoundByTheConformanceSuite )
     EXPECT_EQ( StrValidate< TyChar >( ( std::string( s_szDoctype ) + "<doc><e/>&ref;<e/></doc>" ).c_str() ),
       "The element <doc> is declared to have element content and has character data.\n" );
   }
+  // A character which is not a Char [2] is no character of a document - #x0 among them: it is not where the document ends.
+  for ( const char32_t chNot : { char32_t( 0 ), char32_t( 0x1 ), char32_t( 0xB ), char32_t( 0xC ), char32_t( 0x1F ), char32_t( 0xFFFE ), char32_t( 0xFFFF ) } )
+  {
+    for ( const char * pszWhere : { "<doc>a?b</doc>", "<doc a='x?y'/>", "<doc><!--a?b--></doc>", "<doc><?p a?b?></doc>", "<doc><![CDATA[a?b]]></doc>", "<doc/>?", "<doc/>?<!-- c -->" } )
+    {
+      // The text with the character where its '?' which is not of the markup of a processing instruction is.
+      std::basic_string< TyChar > strText = StrDocumentText< TyChar >( pszWhere );
+      const size_t knPos = strText.find( TyChar( '?' ), ( std::string( pszWhere ).find( "<?p" ) != std::string::npos ) ? strText.find( TyChar( 'a' ) ) : 0 );
+      ASSERT_NE( knPos, std::basic_string< TyChar >::npos );
+      std::basic_string< TyChar > strChar;
+      ConvertString( strChar, &chNot, 1 );
+      if ( !chNot )
+        strChar.assign( 1, TyChar( 0 ) );
+      strText.replace( knPos, 1, strChar );
+      bool fThrew = false;
+      try
+      {
+        typedef xml_traits< _l_transport_fixedmem< TyChar >, true, false > TyXmlTraits;
+        xml_parser< TyXmlTraits > xmlParser;
+        xml_read_cursor< TyXmlTraits > cursor = xmlParser.OpenMemory( strText.data(), strText.length() * sizeof( TyChar ) );
+        for ( size_t nDepth = 0; ; )
+        {
+          if ( cursor.FMoveDown() )
+          {
+            ++nDepth;
+            continue;
+          }
+          if ( !nDepth )
+            break;
+          if ( !cursor.FNextTag() )
+            --nDepth;
+        }
+      }
+      catch ( std::exception const & )
+      {
+        fThrew = true;
+      }
+      EXPECT_TRUE( fThrew ) << "The character " << uint32_t( chNot ) << " in " << pszWhere;
+    }
+  }
   // The writer: a tag which has an attribute by the default of the DTD - whose name is then a string - and other
   //  attributes, written in another type of character than the document's.
   {
@@ -3578,6 +3622,408 @@ TYPED_TEST( DtdTest, FoundByTheConformanceSuite )
       EXPECT_EQ( ( StrDifference< TyChar, true, TyCharOther, true >( s_szDocument, StrNarrowExact( strWritten ).c_str() ) ), "" ) << StrNarrowExact( strWritten );
     }
   }
+}
+
+// What a document may have the parser do by its DTD - xml_dtd_limits: a document's entities are the document's own,
+//  and a few lines of declarations stand for more text than there is memory if nothing holds them to less.
+TYPED_TEST( DtdTest, LimitsOfEntities )
+{
+  typedef TypeParam TyChar;
+  // What reading all of the document throws - empty if nothing. _plimits: the limits of the parser - null for its defaults.
+  auto ErrorReading = []( std::string const & _rstrDocument, const xml_dtd_limits * _plimits = nullptr ) -> std::string
+  {
+    CursorDocument< TyChar > docLeft( _rstrDocument.c_str(), nullptr, nullptr, true, _plimits );
+    CursorDocument< TyChar > docRight( _rstrDocument.c_str(), nullptr, nullptr, true, _plimits );
+    if ( !docLeft.FOpened() || !docRight.FOpened() )
+      return "not opened: " + docLeft.m_strError;
+    try
+    {
+      std::string strDifference;
+      if ( !FCompareXmlDocuments( docLeft.m_cursor, docRight.m_cursor, xml_compare_options(), &strDifference ) )
+        return "not the same as itself: " + strDifference;
+    }
+    catch ( std::exception const & rexc )
+    {
+      return std::string( "exception: " ) + rexc.what();
+    }
+    return std::string();
+  };
+  // "A billion laughs": each entity is ten of the one before it - the last stands for 3 * 10^9 characters.
+  std::string strLaughs = "<!DOCTYPE doc [<!ENTITY lol0 'lol'>";
+  for ( int n = 1; n <= 9; ++n )
+  {
+    strLaughs += "<!ENTITY lol" + std::to_string( n ) + " '";
+    for ( int nRef = 0; nRef < 10; ++nRef )
+      strLaughs += "&lol" + std::to_string( n - 1 ) + ";";
+    strLaughs += "'>";
+  }
+  strLaughs += "]>";
+  // Declared and not referenced it costs nothing which matters: the document is read.
+  EXPECT_EQ( ErrorReading( strLaughs + "<doc>&lol3;</doc>" ), "" );
+  // Referenced - in content or in the value of an attribute - it is an error, and soon.
+  EXPECT_NE( ErrorReading( strLaughs + "<doc>&lol9;</doc>" ).find( "more text than a document's entities may" ), std::string::npos );
+  EXPECT_NE( ErrorReading( strLaughs + "<doc a='&lol9;'/>" ).find( "than is allowed" ), std::string::npos );
+  EXPECT_NE( ErrorReading( strLaughs + "<doc><e a='x &lol8; y'/></doc>" ).find( "than is allowed" ), std::string::npos );
+  // The same with markup in the text of the entities: they are read as content.
+  {
+    std::string strMarkup = "<!DOCTYPE doc [<!ENTITY m0 '<b>lol</b>'>";
+    for ( int n = 1; n <= 9; ++n )
+    {
+      strMarkup += "<!ENTITY m" + std::to_string( n ) + " '";
+      for ( int nRef = 0; nRef < 10; ++nRef )
+        strMarkup += "&m" + std::to_string( n - 1 ) + ";";
+      strMarkup += "'>";
+    }
+    strMarkup += "]>";
+    EXPECT_EQ( ErrorReading( strMarkup + "<doc>&m3;</doc>" ), "" );
+    EXPECT_NE( ErrorReading( strMarkup + "<doc>&m9;</doc>" ).find( "more text than a document's entities may" ), std::string::npos );
+  }
+  // One entity which is large, referenced often: all that the references stand for is what is limited.
+  {
+    const std::string strBig = "<!DOCTYPE doc [<!ENTITY big '" + std::string( 100000, 'x' ) + "'>]>";
+    std::string strFew = strBig + "<doc>", strMany = strBig + "<doc>";
+    for ( int n = 0; n < 20; ++n )
+      strFew += "&big;";
+    for ( int n = 0; n < 400; ++n )
+      strMany += "&big;<e/>";
+    strFew += "</doc>";
+    strMany += "</doc>";
+    EXPECT_EQ( ErrorReading( strFew ), "" );
+    EXPECT_NE( ErrorReading( strMany ).find( "more text than a document's entities may" ), std::string::npos );
+    // The limits are the parser's: whoever opens the document says what they are.
+    xml_dtd_limits limits;
+    limits.m_nMaxEntityExpansion = 0;
+    EXPECT_EQ( ErrorReading( strMany, &limits ), "" );
+    limits.m_nMaxEntityExpansion = 150000;
+    EXPECT_NE( ErrorReading( strFew, &limits ).find( "more text than a document's entities may" ), std::string::npos );
+    limits = xml_dtd_limits();
+    limits.m_nMaxEntityText = 1000;
+    EXPECT_NE( ErrorReading( strBig + "<doc a='&big;'/>", &limits ).find( "than is allowed" ), std::string::npos );
+  }
+  // Entities within entities: a chain which is longer than may be.
+  {
+    std::string strChain = "<!DOCTYPE doc [<!ENTITY c0 'end'>";
+    for ( int n = 1; n <= 200; ++n )
+      strChain += "<!ENTITY c" + std::to_string( n ) + " '&c" + std::to_string( n - 1 ) + ";'>";
+    strChain += "]>";
+    EXPECT_EQ( ErrorReading( strChain + "<doc a='&c50;'>&c50;</doc>" ), "" );
+    EXPECT_NE( ErrorReading( strChain + "<doc>&c200;</doc>" ).find( "deep" ), std::string::npos );
+    EXPECT_NE( ErrorReading( strChain + "<doc a='&c200;'/>" ).find( "than is allowed" ), std::string::npos );
+  }
+  // Parameter entities: each is ten of the one before it - in the literal of an entity, which is where a reference to
+  //  one may be within a declaration when the declaration is itself in the text of a parameter entity.
+  {
+    std::string strParameters = "<!DOCTYPE doc [<!ENTITY % p0 '" + std::string( 100, 'x' ) + "'>";
+    for ( int n = 1; n <= 9; ++n )
+    {
+      strParameters += "<!ENTITY % d" + std::to_string( n ) + " \"<!ENTITY &#37; p" + std::to_string( n ) + " '";
+      for ( int nRef = 0; nRef < 10; ++nRef )
+        strParameters += "&#37;p" + std::to_string( n - 1 ) + ";";
+      strParameters += "'>\">%d" + std::to_string( n ) + ";";
+    }
+    strParameters += "]><doc/>";
+    const std::string strError = ErrorReading( strParameters );
+    EXPECT_TRUE( ( std::string::npos != strError.find( "more than" ) ) || ( std::string::npos != strError.find( "more text" ) ) ) << strError;
+  }
+  // No document type declaration at all - for documents from who is not trusted.
+  {
+    xml_dtd_limits limits;
+    limits.m_fAllowDoctypeDecl = false;
+    EXPECT_EQ( ErrorReading( "<doc a='1'>text &amp; more</doc>", &limits ), "" );
+    EXPECT_NE( ErrorReading( "<!DOCTYPE doc><doc/>", &limits ).find( "told to accept none" ), std::string::npos );
+    EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ENTITY e 'x'>]><doc>&e;</doc>", &limits ).find( "told to accept none" ), std::string::npos );
+    EXPECT_EQ( ErrorReading( "<!DOCTYPE doc [<!ENTITY e 'x'>]><doc>&e;</doc>" ), "" );
+  }
+  // An external entity which is larger than may be.
+  {
+    TestEntities entities;
+    entities.m_mapEntities[ "big.xml" ] = "<c>" + std::string( 5000, 'x' ) + "</c>";
+    xml_dtd_limits limits;
+    limits.m_nMaxExternalEntity = 1000;
+    for ( const bool kfLimited : { false, true } )
+    {
+      CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ENTITY e SYSTEM 'big.xml'>]><doc>&e;</doc>", entities.Resolver< TyChar >(), "doc.xml", true, kfLimited ? &limits : nullptr );
+      ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+      if ( kfLimited )
+        EXPECT_ANY_THROW( (void)doc.m_cursor.FMoveDown() );
+      else
+        EXPECT_NO_THROW( (void)doc.m_cursor.FMoveDown() );
+    }
+  }
+}
+
+// The files which a document may have us read - xml_file_entity_options: by default only those which are where the
+//  document is.
+TEST( DtdExternalFiles, FilesWhichADocumentMayName )
+{
+  namespace fs = std::filesystem;
+  const fs::path pathTop = fs::temp_directory_path() / "xmlpgtest_dtd_confined";
+  std::error_code ec;
+  fs::remove_all( pathTop, ec );
+  ASSERT_TRUE( fs::create_directories( pathTop / "docs" / "sub", ec ) ) << ec.message();
+  auto WriteFile = []( fs::path const & _rpath, std::string const & _rstrBytes )
+  {
+    std::ofstream ofs( _rpath, std::ios::binary );
+    ofs.write( _rstrBytes.data(), std::streamsize( _rstrBytes.size() ) );
+  };
+  WriteFile( pathTop / "secret.txt", "<s>secret</s>" ); // Above the directory of the document.
+  WriteFile( pathTop / "docs" / "beside.xml", "<b>beside</b>" );
+  WriteFile( pathTop / "docs" / "sub" / "below.xml", "<b>below</b>" );
+  WriteFile( pathTop / "docs" / "large.xml", "<b>" + std::string( 4000, 'x' ) + "</b>" );
+  const std::string strDocumentPath = ( pathTop / "docs" / "doc.xml" ).generic_string();
+  // What the content of <doc> is when the entity is the file named - or what is thrown when it is had.
+  auto Read = [&strDocumentPath]( std::string const & _rstrSystem, const xml_file_entity_options * _poptions = nullptr ) -> std::string
+  {
+    typedef xml_traits< _l_transport_fixedmem< char8_t >, true, false > TyXmlTraits;
+    const std::string strDocument = "<!DOCTYPE doc [<!ENTITY e SYSTEM '" + _rstrSystem + "'>]><doc>&e;</doc>";
+    try
+    {
+      xml_parser< TyXmlTraits > xmlParser;
+      if ( !!_poptions )
+        xmlParser.SetReadExternalEntityFiles( *_poptions );
+      else
+        xmlParser.SetReadExternalEntityFiles();
+      xmlParser.SetBaseLocation( std::u8string( strDocumentPath.begin(), strDocumentPath.end() ) );
+      xml_read_cursor< TyXmlTraits > cursor = xmlParser.OpenMemory( strDocument.data(), strDocument.size() );
+      if ( !cursor.FMoveDown() || !cursor.FMoveDown() )
+        return "not read"; // The reference stands for nothing which we have: there is no element within <doc>.
+      std::u8string strContent;
+      cursor.GetContextCur().GetContentString( strContent );
+      return std::string( strContent.begin(), strContent.end() );
+    }
+    catch ( std::exception const & rexc )
+    {
+      return std::string( "exception: " ) + rexc.what();
+    }
+  };
+  // Where the document is, and below.
+  EXPECT_EQ( Read( "beside.xml" ), "beside" );
+  EXPECT_EQ( Read( "sub/below.xml" ), "below" );
+  EXPECT_EQ( Read( "sub/../beside.xml" ), "beside" );
+  EXPECT_EQ( Read( ( pathTop / "docs" / "beside.xml" ).generic_string() ), "beside" ); // Named in full - and it is there.
+  // Not above it - however the path is written.
+  EXPECT_EQ( Read( "../secret.txt" ), "not read" );
+  EXPECT_EQ( Read( "sub/../../secret.txt" ), "not read" );
+  EXPECT_EQ( Read( ( pathTop / "secret.txt" ).generic_string() ), "not read" );
+  EXPECT_EQ( Read( "file:///" + ( pathTop / "secret.txt" ).generic_string() ), "not read" );
+  // Not on another machine - and nothing is looked at there to say so.
+  EXPECT_EQ( Read( "//nosuchhost.invalid/share/x.xml" ), "not read" );
+  EXPECT_EQ( Read( "\\\\nosuchhost.invalid\\share\\x.xml" ), "not read" );
+  EXPECT_EQ( Read( "http://nosuchhost.invalid/x.xml" ), "not read" );
+  // Unless whoever opens the document says where else - or that anywhere will do.
+  {
+    xml_file_entity_options options;
+    options.m_pathRoot = pathTop;
+    EXPECT_EQ( Read( "../secret.txt", &options ), "secret" );
+    EXPECT_EQ( Read( "beside.xml", &options ), "beside" );
+    options.m_pathRoot = pathTop / "docs" / "sub";
+    EXPECT_EQ( Read( "beside.xml", &options ), "not read" );
+    EXPECT_EQ( Read( "sub/below.xml", &options ), "below" );
+    options = xml_file_entity_options();
+    options.m_fConfineToDocument = false;
+    EXPECT_EQ( Read( "../secret.txt", &options ), "secret" );
+  }
+  // A file which is larger than may be is not read.
+  {
+    EXPECT_EQ( Read( "large.xml" ), std::string( 4000, 'x' ) );
+    xml_file_entity_options options;
+    options.m_nbyMaxFile = 1000;
+    EXPECT_EQ( Read( "large.xml", &options ), "not read" );
+    EXPECT_EQ( Read( "beside.xml", &options ), "beside" );
+  }
+  fs::remove_all( pathTop, ec );
+}
+
+// Documents which are cut short and documents which are changed a character at a time: whatever the text, reading it
+//  either gives a document or throws - it doesn't crash and it doesn't go on forever. And a document which is read is
+//  one which the writer can write: what it writes is that document when it is read again.
+// The documents which this starts from - each with much of what a document may have.
+static const char * const s_rgpszRobustnessDocuments[] = {
+  // Tags, attributes, references, comments, processing instructions, CDATA - and namespaces.
+  "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone='yes'?>\n"
+  "<!-- before --><?pi before?>\n"
+  "<doc xmlns='urn:d' xmlns:p=\"urn:p\" a='1' p:b=\"two &amp; &#51; &#x34;\">text &lt;here&gt;<p:e/>\n"
+  " <sub>more<![CDATA[ <raw> & ]]> text</sub><!-- c --><?t d?><e2 x='y'></e2>\n"
+  "</doc>\n<!-- after -->\n",
+  // A DTD: elements, attributes with defaults and types, entities - text, markup, within each other - and notations.
+  "<!DOCTYPE doc [\n"
+  "<!ELEMENT doc (item+, note?)>\n"
+  "<!ELEMENT item (#PCDATA|b)*>\n"
+  "<!ELEMENT b (#PCDATA)>\n"
+  "<!ELEMENT note EMPTY>\n"
+  "<!ATTLIST item kind (a|b) 'a' id ID #IMPLIED ref IDREF #IMPLIED n NMTOKENS #IMPLIED>\n"
+  "<!ATTLIST note xml:space (default|preserve) #FIXED 'default'>\n"
+  "<!NOTATION gif SYSTEM 'viewer'>\n"
+  "<!ENTITY pic SYSTEM 'pic.gif' NDATA gif>\n"
+  "<!ENTITY t 'text'>\n"
+  "<!ENTITY ws 'a\tb'>\n"
+  "<!ENTITY m 'with <b>bold &t;</b>'>\n"
+  "<!ENTITY mm '&m; and &m;'>\n"
+  "<?dtd-pi x?><!-- in the DTD -->\n"
+  "]>\n"
+  "<doc><item id='i1'>one &t;</item><item kind='b' id=' i2 ' ref='i1' n=' x  y '>two &m; &mm; end &ws;</item><note/></doc>\n",
+  // Parameter entities - between declarations and in the literal of an entity - and what declares by them.
+  "<!DOCTYPE doc [\n"
+  "<!ENTITY % decls \"<!ELEMENT doc (#PCDATA|e)*><!ATTLIST doc a CDATA 'dflt'>\">\n"
+  "%decls;\n"
+  "<!ENTITY % inner \"<!ENTITY g 'general &#38;#60;e/&#38;#62;'>\">\n"
+  "%inner;\n"
+  "<!ELEMENT e EMPTY>\n"
+  "]>\n"
+  "<doc b='v'>x &g; y<e/></doc>",
+};
+
+// Read all of the document - every string of it is had - by a validating cursor. Returns whether it was read: false
+//  if reading it threw. _rstrWritten: what the writer writes from it.
+template < class t_TyChar >
+bool FReadForRobustness( std::basic_string< t_TyChar > const & _rstrText, std::basic_string< t_TyChar > * _pstrWritten = nullptr )
+{
+  typedef xml_traits< _l_transport_fixedmem< t_TyChar >, true, true > TyXmlTraits;
+  typedef xml_parser< TyXmlTraits > TyXmlParser;
+  try
+  {
+    {
+      TyXmlParser xmlParser;
+      typename TyXmlParser::_TyReadCursor cursor = xmlParser.OpenMemory( _rstrText.data(), _rstrText.length() * sizeof( t_TyChar ) );
+      xml_compare_options options;
+      options.m_fCompareDoctypeDecl = true;
+      _xml_compare_reader< typename TyXmlParser::_TyReadCursor > reader( cursor, options );
+      _xml_compare_item item;
+      do
+      {
+        reader.GetNext( item );
+      }
+      while ( excmpEndOfDocument != item.m_excmp );
+    }
+    if ( !!_pstrWritten )
+    {
+      TyXmlParser xmlParser;
+      typename TyXmlParser::_TyReadCursor cursor = xmlParser.OpenMemory( _rstrText.data(), _rstrText.length() * sizeof( t_TyChar ) );
+      *_pstrWritten = StrWriteFromAnyCursor< t_TyChar >( cursor );
+    }
+  }
+  catch ( std::exception const & )
+  {
+    return false;
+  }
+  return true;
+}
+// Whether the two texts are the same document - false as well if reading either throws.
+template < class t_TyChar >
+bool FSameDocumentForRobustness( std::basic_string< t_TyChar > const & _rstrLeft, std::basic_string< t_TyChar > const & _rstrRight, std::string & _rstrDifference )
+{
+  typedef xml_traits< _l_transport_fixedmem< t_TyChar >, true, false > TyXmlTraits;
+  typedef xml_parser< TyXmlTraits > TyXmlParser;
+  try
+  {
+    TyXmlParser xmlParserLeft, xmlParserRight;
+    typename TyXmlParser::_TyReadCursor cursorLeft = xmlParserLeft.OpenMemory( _rstrLeft.data(), _rstrLeft.length() * sizeof( t_TyChar ) );
+    typename TyXmlParser::_TyReadCursor cursorRight = xmlParserRight.OpenMemory( _rstrRight.data(), _rstrRight.length() * sizeof( t_TyChar ) );
+    xml_compare_options options;
+    options.m_fCompareDoctypeDecl = true;
+    return FCompareXmlDocuments( cursorLeft, cursorRight, options, &_rstrDifference );
+  }
+  catch ( std::exception const & rexc )
+  {
+    _rstrDifference = std::string( "exception: " ) + rexc.what();
+    return false;
+  }
+}
+
+TYPED_TEST( DtdTest, DocumentsWhichAreCutShort )
+{
+  typedef TypeParam TyChar;
+  for ( const char * pszDocument : s_rgpszRobustnessDocuments )
+  {
+    const std::basic_string< TyChar > strText = StrDocumentText< TyChar >( pszDocument );
+    ASSERT_TRUE( FReadForRobustness( strText ) ) << pszDocument;
+    // Where the document's element ends: what is cut before that is no document.
+    const std::string strDocument( pszDocument );
+    const size_t knPosEndOfElement = strDocument.rfind( "</doc>" ) + 6;
+    const size_t knBOM = strText.length() - strDocument.length();
+    for ( size_t nLength = 0; nLength < strText.length(); ++nLength )
+    {
+      const bool kfRead = FReadForRobustness( strText.substr( 0, nLength ) );
+      if ( nLength < knBOM + knPosEndOfElement )
+        EXPECT_FALSE( kfRead ) << "Cut at " << nLength << ":\n" << strDocument.substr( 0, ( nLength > knBOM ) ? ( nLength - knBOM ) : 0 );
+    }
+  }
+}
+
+TYPED_TEST( DtdTest, DocumentsWhichAreChanged )
+{
+  typedef TypeParam TyChar;
+  // The characters which are put into a document: those of markup, white space, one which is no character of XML
+  //  and some which are not ASCII.
+  static const char32_t s_rgchPut[] = { U'<', U'>', U'&', U';', U'\'', U'"', U'[', U']', U'%', U'!', U'?', U'/', U'-', U'=', U':', U'#', U' ', U'\n', U'\r', U'\t',
+                                        U'x', U'0', char32_t( 0x1 ), char32_t( 0xE9 ), char32_t( 0x3A9 ), char32_t( 0xB7 ), char32_t( 0xFFFE ), char32_t( 0x10400 ) };
+  uint32_t nRandom = 12345; // The same changes each time the test runs.
+  auto NRandom = [&nRandom]( size_t _nBelow ) -> size_t
+  {
+    nRandom = nRandom * 1664525u + 1013904223u;
+    return size_t( nRandom >> 8 ) % _nBelow;
+  };
+  size_t nRead = 0, nNotRead = 0;
+  for ( const char * pszDocument : s_rgpszRobustnessDocuments )
+  {
+    const std::basic_string< TyChar > strText = StrDocumentText< TyChar >( pszDocument );
+    const size_t knBOM = strText.length() - strlen( pszDocument );
+    for ( size_t nChange = 0; nChange < 3000; ++nChange )
+    {
+      std::basic_string< TyChar > strChanged = strText;
+      // One change, or a few of them.
+      for ( size_t nOf = 1 + NRandom( 3 ); nOf--; )
+      {
+        if ( strChanged.length() <= knBOM + 1 )
+          break;
+        const size_t knPos = knBOM + NRandom( strChanged.length() - knBOM );
+        switch( NRandom( 5 ) )
+        {
+          case 0: // A character is taken away.
+            strChanged.erase( knPos, 1 );
+          break;
+          case 1: // One is there twice.
+            strChanged.insert( knPos, 1, strChanged[knPos] );
+          break;
+          case 2: // Two are the other way around.
+            if ( knPos + 1 < strChanged.length() )
+              std::swap( strChanged[knPos], strChanged[knPos + 1] );
+          break;
+          default: // One is another - or another is put before it.
+          {
+            const char32_t chPut = s_rgchPut[ NRandom( DimensionOf( s_rgchPut ) ) ];
+            std::basic_string< TyChar > strPut;
+            ConvertString( strPut, &chPut, 1 );
+            if ( !!NRandom( 2 ) )
+              strChanged.replace( knPos, 1, strPut );
+            else
+              strChanged.insert( knPos, strPut );
+          }
+          break;
+        }
+      }
+      std::basic_string< TyChar > strWritten;
+      if ( !FReadForRobustness( strChanged, &strWritten ) )
+      {
+        ++nNotRead;
+        continue;
+      }
+      ++nRead;
+      // It is a document: then what the writer wrote of it is that document.
+      std::string strDifference;
+      std::basic_string< TyChar > strWrittenText;
+      if ( sizeof( TyChar ) > 1 )
+        strWrittenText += TyChar( 0xFEFF );
+      strWrittenText += strWritten;
+      EXPECT_TRUE( FSameDocumentForRobustness( strChanged, strWrittenText, strDifference ) )
+        << "change " << nChange << ": " << strDifference << "\nthe document:\n" << StrNarrowExact( strChanged.substr( knBOM ) ) << "\nwritten:\n" << StrNarrowExact( strWritten );
+      if ( ::testing::Test::HasFailure() )
+        return; // One is enough to look at.
+    }
+  }
+  // Most changes make a document which is none - and some don't: both are read here.
+  EXPECT_GT( nRead, 100u );
+  EXPECT_GT( nNotRead, 1000u );
 }
 
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.
@@ -3599,6 +4045,14 @@ TYPED_TEST( DtdTest, FoundByTheConformanceSuite )
 namespace
 {
 namespace fs = std::filesystem;
+// The external entities of the documents of the suite are files of the suite - some of them in a directory beside
+//  that of the document: what may be read is what is within the suite.
+inline xml_file_entity_options SuiteFileEntityOptions()
+{
+  xml_file_entity_options options;
+  options.m_pathRoot = fs::path( XMLP_XMLCONF_DIR );
+  return options;
+}
 
 template < class t_TyChar >
 bool FStartsWith( std::basic_string_view< t_TyChar > _sv, size_t _nPos, const char * _psz )
@@ -3933,7 +4387,7 @@ EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string &
   try
   {
     TyXmlParserVarDtd xmlParser;
-    xmlParser.SetReadExternalEntityFiles();
+    xmlParser.SetReadExternalEntityFiles( SuiteFileEntityOptions() );
     xmlParser.SetBaseLocation( _rpath.generic_string() );
     xmlParser.SetUseXMLNamespaces( _fUseXMLNamespaces );
     TyXmlParserVarDtd::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
@@ -4075,7 +4529,7 @@ NamespaceSuiteRead ReadNamespaceSuiteDocument( fs::path const & _rpath, bool _fU
   const std::string strBytes = ss.str();
   auto Open = [&]( TyXmlParserVarDtd & _rxmlParser )
   {
-    _rxmlParser.SetReadExternalEntityFiles();
+    _rxmlParser.SetReadExternalEntityFiles( SuiteFileEntityOptions() );
     _rxmlParser.SetBaseLocation( _rpath.generic_string() );
     _rxmlParser.SetUseXMLNamespaces( _fUseXMLNamespaces );
     return _rxmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
@@ -4140,8 +4594,9 @@ TEST_P( NamespacesInXml10, Document )
   const fs::path pathFile = PathNamespaceSuite() / rtest.m_strUri;
   const NamespaceSuiteRead read = ReadNamespaceSuiteDocument( pathFile, true );
   const NamespaceSuiteRead readWithout = ReadNamespaceSuiteDocument( pathFile, false );
-  // Without namespaces it is a document of XML 1.0 - well formed, but for the one which has the same attribute twice.
-  static const std::set< std::string > s_setNotWellFormedWithoutNamespaces{ "035.xml" };
+  // Without namespaces it is a document of XML 1.0 - well formed, but for the one which has the same attribute twice
+  //  and the one whose bytes - as they are in the suite - are not UTF-8: a byte of ISO-8859-1 in a namespace name.
+  static const std::set< std::string > s_setNotWellFormedWithoutNamespaces{ "035.xml", "006.xml" };
   EXPECT_EQ( readWithout.m_fThrew, s_setNotWellFormedWithoutNamespaces.contains( rtest.m_strUri ) ) << "without namespaces: " << readWithout.m_strWhy;
   EXPECT_EQ( readWithout.m_strRoundTrip, "" ) << "without namespaces - written:\n" << readWithout.m_strWritten;
   if ( "valid" == rtest.m_strType )
@@ -4223,7 +4678,7 @@ std::vector< SuiteTest > RgSuiteTestsRead( std::string * _pstrError )
   try
   {
     TyXmlParser xmlParser;
-    xmlParser.SetReadExternalEntityFiles();
+    xmlParser.SetReadExternalEntityFiles( SuiteFileEntityOptions() );
     const std::string strBase = pathCatalog.generic_string();
     xmlParser.SetBaseLocation( std::u8string( strBase.begin(), strBase.end() ) );
     typename TyXmlParser::_TyReadCursor cursor = xmlParser.OpenMemory( strBytes.data(), strBytes.size() );
@@ -4385,7 +4840,7 @@ SuiteRead SuiteReadDocument( std::string const & _rstrBytes, fs::path const & _r
   {
     t_TyXmlParserVar xmlParser;
     if ( _fReadExternalEntities )
-      xmlParser.SetReadExternalEntityFiles();
+      xmlParser.SetReadExternalEntityFiles( SuiteFileEntityOptions() );
     xmlParser.SetBaseLocation( _rpath.generic_string() );
     xmlParser.SetUseXMLNamespaces( _fUseXMLNamespaces );
     typename t_TyXmlParserVar::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( _rstrBytes.data(), _rstrBytes.size() );
@@ -4426,6 +4881,31 @@ std::string StrDeclaredEncodingOfDocument( std::string const & _rstrBytes )
   return strEncoding;
 }
 
+// Whether the bytes are UTF-8: each character is encoded in as few bytes as it can be, none is a surrogate or beyond
+//  #x10FFFF - and none is #x0, which no document has.
+inline bool FIsUTF8( std::string const & _rstrBytes )
+{
+  for ( size_t n = 0; n < _rstrBytes.size(); )
+  {
+    const uint8_t by = uint8_t( _rstrBytes[n] );
+    const size_t knBytes = ( by < 0x80 ) ? 1 : ( ( ( by & 0xE0 ) == 0xC0 ) ? 2 : ( ( ( by & 0xF0 ) == 0xE0 ) ? 3 : ( ( ( by & 0xF8 ) == 0xF0 ) ? 4 : 0 ) ) );
+    if ( !knBytes || ( n + knBytes > _rstrBytes.size() ) )
+      return false;
+    uint32_t ch = ( 1 == knBytes ) ? by : ( by & ( 0xFF >> ( knBytes + 1 ) ) );
+    for ( size_t nByte = 1; nByte < knBytes; ++nByte )
+    {
+      const uint8_t byNext = uint8_t( _rstrBytes[n + nByte] );
+      if ( ( byNext & 0xC0 ) != 0x80 )
+        return false;
+      ch = ( ch << 6 ) | ( byNext & 0x3F );
+    }
+    static const uint32_t s_rgchFirstOfLength[] = { 0, 0, 0x80, 0x800, 0x10000 };
+    if ( !ch || ( ch < s_rgchFirstOfLength[knBytes] ) || ( ch > 0x10FFFF ) || ( ( ch >= 0xD800 ) && ( ch <= 0xDFFF ) ) )
+      return false;
+    n += knBytes;
+  }
+  return true;
+}
 // What is found of one test of the suite - empty strings for what is as it should be.
 struct SuiteResult
 {
@@ -4480,8 +4960,9 @@ SuiteResult RunSuiteTest( SuiteTest const & _rtest )
   else
   if ( ( "not-wf" == _rtest.m_strType ) && ( esoThrew != readValidating.m_eso ) )
     result.m_strValidating = Said( "not well formed", readValidating );
-  // The same document in the other encodings: their lexical analyzers are others.
-  if ( strEncoding.empty() && ( std::string::npos == strBytes.find( '\0' ) ) )
+  // The same document in the other encodings: their lexical analyzers are others. ( Only a document whose bytes are
+  //  UTF-8: one which has bytes that are not the encoding of a character is no document in another encoding. )
+  if ( strEncoding.empty() && FIsUTF8( strBytes ) )
   {
     auto Judge = [&]( SuiteRead const & _rread ) -> std::string
     {
@@ -4540,7 +5021,7 @@ SuiteResult RunSuiteTest( SuiteTest const & _rtest )
       ssOutput << ifsOutput.rdbuf();
       const std::string strOutput = ssOutput.str();
       TyXmlParserVarDtd xmlParser;
-      xmlParser.SetReadExternalEntityFiles();
+      xmlParser.SetReadExternalEntityFiles( SuiteFileEntityOptions() );
       xmlParser.SetBaseLocation( pathFile.generic_string() );
       xmlParser.SetUseXMLNamespaces( _rtest.m_fNamespace );
       TyXmlParserVarDtd::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
@@ -4564,7 +5045,7 @@ SuiteResult RunSuiteTest( SuiteTest const & _rtest )
     std::string strWritten;
     {
       TyXmlParserVarDtd xmlParser;
-      xmlParser.SetReadExternalEntityFiles();
+      xmlParser.SetReadExternalEntityFiles( SuiteFileEntityOptions() );
       xmlParser.SetBaseLocation( pathFile.generic_string() );
       xmlParser.SetUseXMLNamespaces( _rtest.m_fNamespace );
       TyXmlParserVarDtd::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
@@ -4572,12 +5053,12 @@ SuiteResult RunSuiteTest( SuiteTest const & _rtest )
       strWritten.assign( strWritten8.begin(), strWritten8.end() );
     }
     TyXmlParserVarDtd xmlParser;
-    xmlParser.SetReadExternalEntityFiles();
+    xmlParser.SetReadExternalEntityFiles( SuiteFileEntityOptions() );
     xmlParser.SetBaseLocation( pathFile.generic_string() );
     xmlParser.SetUseXMLNamespaces( _rtest.m_fNamespace );
     TyXmlParserVarDtd::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
     TyXmlParserVarDtd xmlParserWritten;
-    xmlParserWritten.SetReadExternalEntityFiles();
+    xmlParserWritten.SetReadExternalEntityFiles( SuiteFileEntityOptions() );
     xmlParserWritten.SetBaseLocation( pathFile.generic_string() );
     xmlParserWritten.SetUseXMLNamespaces( _rtest.m_fNamespace );
     TyXmlParserVarDtd::_TyReadCursorVar cursorWritten = xmlParserWritten.OpenMemoryVar( strWritten.data(), strWritten.size() );
