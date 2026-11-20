@@ -39,6 +39,7 @@ typedef std::allocator< char >	_TyDefaultAllocator;
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -792,7 +793,8 @@ struct CursorDocument
 
   // _rresolver: how the external entities of the DTD are had - if they are to be read.
   // _pszBase: the location of the document, for the resolver.
-  explicit CursorDocument( const char * _pszText, xml_external_entity_resolver< t_TyChar > const & _rresolver = nullptr, const char * _pszBase = nullptr )
+  // _fUseXMLNamespaces: whether the document is read with Namespaces in XML.
+  explicit CursorDocument( const char * _pszText, xml_external_entity_resolver< t_TyChar > const & _rresolver = nullptr, const char * _pszBase = nullptr, bool _fUseXMLNamespaces = true )
   {
     if ( sizeof( t_TyChar ) > 1 )
       m_strText += t_TyChar( 0xFEFF ); // The byte order mark: how the encoding of what is in memory is known.
@@ -801,6 +803,7 @@ struct CursorDocument
     {
       if ( !!_rresolver )
         m_xmlParser.SetExternalEntityResolver( _rresolver );
+      m_xmlParser.SetUseXMLNamespaces( _fUseXMLNamespaces );
       if ( !!_pszBase )
         m_xmlParser.SetBaseLocation( std::basic_string< t_TyChar >( _pszBase, _pszBase + strlen( _pszBase ) ) );
       m_cursor = m_xmlParser.OpenMemory( m_strText.data(), m_strText.length() * sizeof( t_TyChar ) );
@@ -1144,6 +1147,7 @@ std::basic_string< t_TyChar > StrWriteFromCursor( CursorDocument< t_TyChar, t_kf
   xwWriter.SetWriteBOM( false );
   xwWriter.SetWriteXMLDecl( !_rdoc.m_cursor.FPseudoXMLDecl() );
   xwWriter.SetWriteDoctypeDecl( _fWriteDoctypeDecl );
+  xwWriter.SetUseNamespaces( _rdoc.m_cursor.FUseXMLNamespaces() );
   if ( _nWriteDefaultedAttributes >= 0 )
     xwWriter.SetWriteDefaultedAttributes( !!_nWriteDefaultedAttributes );
   typename _TyXmlWriter::_TyXMLDeclProperties xdp( _rdoc.m_cursor.GetXMLDeclProperties() );
@@ -2937,6 +2941,7 @@ std::basic_string< t_TyChar > StrWriteFromAnyCursor( t_TyCursor & _rcursor, bool
   xwWriter.SetWriteBOM( false );
   xwWriter.SetWriteXMLDecl( !_rcursor.FPseudoXMLDecl() );
   xwWriter.SetWriteDoctypeDecl( _fWriteDoctypeDecl );
+  xwWriter.SetUseNamespaces( _rcursor.FUseXMLNamespaces() );
   typename _TyXmlWriter::_TyXMLDeclProperties xdp;
   _rcursor.GetXMLDeclProperties( xdp );
   xwWriter.OpenMemFile( xdp, nullptr, true );
@@ -3271,6 +3276,210 @@ TYPED_TEST( DtdTest, WriterStringsOfSectionsAndDeclarations )
   EXPECT_NE( ErrorWritingDoctype( " <!DOCTYPE doc>" ), "" );
   EXPECT_NE( ErrorWritingDoctype( "<!DOCTYPE doc [<!ENTITY % p '<!ELEMENT doc ANY>'><!ELEMENT a (%p;)>]>" ), "" ); // WFC: PEs in Internal Subset.
   EXPECT_NE( ErrorWritingDoctype( "" ), "" );
+}
+
+// Namespaces in XML - xml_parser<>::SetUseXMLNamespaces():
+//  - With them - which is so unless the parser is told otherwise - the names of tags and of attributes are qualified
+//    names, and a document which is not namespace-well-formed is an error.
+//  - Without them the document is one of XML 1.0 alone: any Name is a name and "xmlns" is an attribute as any other.
+TYPED_TEST( DtdTest, NamespacesOrNot )
+{
+  typedef TypeParam TyChar;
+  // What reading all of the document throws - empty if nothing.
+  auto ErrorReading = []( const char * _pszDocument, bool _fUseXMLNamespaces ) -> std::string
+  {
+    CursorDocument< TyChar > docLeft( _pszDocument, nullptr, nullptr, _fUseXMLNamespaces );
+    CursorDocument< TyChar > docRight( _pszDocument, nullptr, nullptr, _fUseXMLNamespaces );
+    if ( !docLeft.FOpened() || !docRight.FOpened() )
+      return "not opened: " + docLeft.m_strError;
+    try
+    {
+      std::string strDifference;
+      if ( !FCompareXmlDocuments( docLeft.m_cursor, docRight.m_cursor, xml_compare_options(), &strDifference ) )
+        return "not the same as itself: " + strDifference;
+    }
+    catch ( std::exception const & rexc )
+    {
+      return std::string( "exception: " ) + rexc.what();
+    }
+    return std::string();
+  };
+  // Names which are Names [5] of XML and not qualified names [7] of Namespaces in XML: a colon at the beginning or at
+  //  the end, more than one colon, and a local part which doesn't begin as a name does.
+  static const char * const s_rgpszNotQualified[] = {
+    "<a:b:c xmlns:a='u'/>", "<:a/>", "<a: xmlns:a='u'/>", "<:/>", "<doc :='v'/>", "<doc a:='v' xmlns:a='u'/>", "<doc :a='v'/>",
+    "<doc xmlns:a='u' a:b:c='v'/>", "<a:1b xmlns:a='u'/>", "<doc xmlns:a='u' a:-b='v'/>", "<doc xmlns:='u'/>", "<doc><a:b:c xmlns:a='u'></a:b:c></doc>",
+    "<a::b xmlns:a='u'/>" };
+  for ( const char * pszDocument : s_rgpszNotQualified )
+  {
+    EXPECT_NE( ErrorReading( pszDocument, true ).find( "is not a qualified name" ), std::string::npos ) << pszDocument << ": " << ErrorReading( pszDocument, true );
+    EXPECT_EQ( ErrorReading( pszDocument, false ), "" ) << pszDocument;
+  }
+  // Qualified names - and those of a document which has no colon at all - are names either way.
+  static const char * const s_rgpszQualified[] = {
+    "<doc a='1' b-c.d='2'>text<e/></doc>", "<p:a xmlns:p='u' p:x='1' y='2'><p:b/></p:a>", "<doc xmlns='u' xml:lang='en'><_a.b-c x1='1'/></doc>" };
+  for ( const char * pszDocument : s_rgpszQualified )
+  {
+    EXPECT_EQ( ErrorReading( pszDocument, true ), "" ) << pszDocument;
+    EXPECT_EQ( ErrorReading( pszDocument, false ), "" ) << pszDocument;
+  }
+  // Without namespaces: the names are as they are written, a prefix is not one - nothing declares it - and a
+  //  declaration of a namespace is an attribute as any other.
+  {
+    CursorDocument< TyChar > doc( "<a:b:c x:y='1' xmlns:q='u' :='2' z:='3'><:d/><e:></e:></a:b:c>", nullptr, nullptr, false );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    EXPECT_FALSE( doc.m_cursor.FUseXMLNamespaces() );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( StrNarrow( doc.m_cursor.SvTagCur() ), "a:b:c" );
+    EXPECT_EQ( doc.StrAttributes(), "x:y=\"1\" xmlns:q=\"u\" :=\"2\" z:=\"3\"" );
+    ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+    EXPECT_EQ( StrNarrow( doc.m_cursor.SvTagCur() ), ":d" );
+    ASSERT_TRUE( doc.m_cursor.FNextTag() );
+    EXPECT_EQ( StrNarrow( doc.m_cursor.SvTagCur() ), "e:" );
+  }
+  // The end tag is to be the name of the start tag - all of it.
+  EXPECT_NE( ErrorReading( "<doc><e:></e></doc>", false ), "" );
+  EXPECT_NE( ErrorReading( "<doc><e></e:></doc>", false ), "" );
+  EXPECT_NE( ErrorReading( "<doc><a:b></a:c></doc>", false ), "" );
+  // The same name twice is the same attribute twice.
+  EXPECT_NE( ErrorReading( "<doc a:b='1' a:b='2'/>", false ), "" );
+  // Without namespaces the document is written as it was read.
+  {
+    static const char s_szDocument[] = "<a:b:c x:y='1' xmlns:q=\"u\" :='2' z:='3'>text<:d/><e:>more</e:><?t:u v?></a:b:c>";
+    CursorDocument< TyChar > doc( s_szDocument, nullptr, nullptr, false );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    std::basic_string< TyChar > strWritten;
+    ASSERT_NO_THROW( strWritten = StrWriteFromCursor( doc ) );
+    EXPECT_EQ( StrNarrowExact( strWritten ), s_szDocument );
+  }
+  // A writer which is not told that the document is one without namespaces - it uses them unless it is told - writes
+  //  it as it was read all the same: the tokens of the cursor say of each name that it is in no namespace.
+  {
+    static const char s_szDocument[] = "<a:b:c x:y='1' xmlns:q=\"u\" :='2' z:='3'>text<:d/><e:>more</e:></a:b:c>";
+    CursorDocument< TyChar > doc( s_szDocument, nullptr, nullptr, false );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    TyTestXmlWriter< TyChar > xwWriter;
+    xwWriter.SetWriteBOM( false );
+    xwWriter.SetWriteXMLDecl( false );
+    xwWriter.OpenMemFile();
+    std::string strResult;
+    try
+    {
+      xwWriter.NWriteFromReadCursor( doc.m_cursor );
+      strResult = StrNarrowExact( StrWritten< TyChar >( xwWriter ) );
+    }
+    catch ( std::exception const & rexc )
+    {
+      strResult = std::string( "exception: " ) + rexc.what();
+    }
+    EXPECT_EQ( strResult, s_szDocument );
+  }
+  // And compared by its names as they are: a prefix is part of a name.
+  {
+    CursorDocument< TyChar > docLeft( "<a:x p:y='1'/>", nullptr, nullptr, false );
+    CursorDocument< TyChar > docRight( "<b:x p:y='1'/>", nullptr, nullptr, false );
+    ASSERT_TRUE( docLeft.FOpened() && docRight.FOpened() );
+    EXPECT_FALSE( FCompareXmlDocuments( docLeft.m_cursor, docRight.m_cursor ) );
+  }
+  {
+    CursorDocument< TyChar > docLeft( "<a:x p:y='1'/>", nullptr, nullptr, false );
+    CursorDocument< TyChar > docRight( "<a:x q:y='1'/>", nullptr, nullptr, false );
+    ASSERT_TRUE( docLeft.FOpened() && docRight.FOpened() );
+    EXPECT_FALSE( FCompareXmlDocuments( docLeft.m_cursor, docRight.m_cursor ) );
+  }
+
+  // The reserved prefixes and namespace names ( Namespaces in XML, 3 ) - with namespaces.
+  static const char * const s_rgpszReserved[] = {
+    "<doc xmlns:xmlns='u'/>",
+    "<doc xmlns:p='http://www.w3.org/2000/xmlns/'/>",
+    "<doc xmlns='http://www.w3.org/2000/xmlns/'/>",
+    "<doc xmlns:xml='u'/>",
+    "<doc xmlns:p='http://www.w3.org/XML/1998/namespace'/>",
+    "<doc xmlns='http://www.w3.org/XML/1998/namespace'/>" };
+  for ( const char * pszDocument : s_rgpszReserved )
+  {
+    EXPECT_NE( ErrorReading( pszDocument, true ).find( "not namespace-well-formed" ), std::string::npos ) << pszDocument << ": " << ErrorReading( pszDocument, true );
+    EXPECT_EQ( ErrorReading( pszDocument, false ), "" ) << pszDocument;
+  }
+  EXPECT_EQ( ErrorReading( "<doc xmlns:xml='http://www.w3.org/XML/1998/namespace' xml:space='preserve'/>", true ), "" );
+  // A prefix which is not declared, one which is declared twice by a tag, and one whose declaration is taken away.
+  EXPECT_NE( ErrorReading( "<q:doc/>", true ), "" );
+  EXPECT_NE( ErrorReading( "<doc q:a='1'/>", true ), "" );
+  EXPECT_NE( ErrorReading( "<doc xmlns:p='u' xmlns:p='v'/>", true ), "" );
+  EXPECT_NE( ErrorReading( "<doc xmlns:p='u'><e xmlns:p=''/></doc>", true ), "" );
+  EXPECT_EQ( ErrorReading( "<doc xmlns='u'><e xmlns=''/></doc>", true ), "" );
+  // The name of a namespace is the value of the attribute which declares it - what its references stand for - and two
+  //  attributes of a tag are the same attribute if they have the same local name and namespace name.
+  EXPECT_EQ( ErrorReading( "<doc xmlns:a='http://x&#47;y' xmlns:b='http://x/z'><e a:x='1' b:x='2'/></doc>", true ), "" );
+  EXPECT_NE( ErrorReading( "<doc xmlns:a='http://x&#47;y' xmlns:b='http://x/y'><e a:x='1' b:x='2'/></doc>", true ), "" );
+  EXPECT_NE( ErrorReading( "<!DOCTYPE doc [<!ENTITY u 'http://x/y'>]><doc xmlns:a='&u;' xmlns:b='http://x/y'><e a:x='1' b:x='2'/></doc>", true ), "" );
+  EXPECT_EQ( ErrorReading( "<doc xmlns:a='http://x&#47;y' xmlns:b='http://x/y'><e a:x='1' b:x='2'/></doc>", false ), "" );
+  // No colon in the target of a processing instruction, in the name of an entity or in that of a notation.
+  static const char * const s_rgpszColons[] = {
+    "<doc><?a:b c?></doc>", "<?a:b c?><doc/>",
+    "<!DOCTYPE doc [<!ENTITY a:b 'x'>]><doc/>", "<!DOCTYPE doc [<!ENTITY % a:b 'x'>]><doc/>",
+    "<!DOCTYPE doc [<!NOTATION n:m SYSTEM 'x'>]><doc/>", "<!DOCTYPE doc [<?a:b c?>]><doc/>" };
+  for ( const char * pszDocument : s_rgpszColons )
+  {
+    EXPECT_NE( ErrorReading( pszDocument, true ).find( "not namespace-well-formed" ), std::string::npos ) << pszDocument << ": " << ErrorReading( pszDocument, true );
+    EXPECT_EQ( ErrorReading( pszDocument, false ), "" ) << pszDocument;
+  }
+  // The DTD knows names as they are written - with namespaces or without: the declarations are those of the names.
+  {
+    static const char s_szDocument[] =
+      "<!DOCTYPE p:doc [<!ELEMENT p:doc (p:e)*><!ELEMENT p:e EMPTY><!ATTLIST p:doc xmlns:p CDATA #FIXED 'u'><!ATTLIST p:e p:k (a|b) 'a' id ID #IMPLIED r IDREF #IMPLIED>]>"
+      "<p:doc><p:e id='i1'/><p:e p:k='b' r='i1'/></p:doc>";
+    for ( const bool kfUseXMLNamespaces : { true, false } )
+    {
+      CursorDocument< TyChar, true, true > doc( s_szDocument, nullptr, nullptr, kfUseXMLNamespaces );
+      ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+      ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+      EXPECT_EQ( doc.StrAttributes(), "xmlns:p=\"u\"" ) << kfUseXMLNamespaces; // By its default: with namespaces it declares the prefix of the document.
+      ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+      EXPECT_EQ( doc.StrAttributes(), "id=\"i1\" p:k=\"a\"" ) << kfUseXMLNamespaces;
+      ASSERT_TRUE( doc.m_cursor.FMoveUp() );
+      (void)doc.m_cursor.FNextTag(); // To the end of the document.
+      EXPECT_TRUE( doc.m_cursor.FIsValid() ) << kfUseXMLNamespaces << ( doc.m_cursor.RgValidityErrors().empty() ? std::string() : doc.m_cursor.RgValidityErrors().front() );
+    }
+  }
+  // Namespace validity: the value of an attribute whose type is ID, IDREF(S), ENTITY(IES) or NOTATION has no colon.
+  {
+    static const char s_szDocument[] =
+      "<!DOCTYPE doc [<!ELEMENT doc (e)*><!ELEMENT e EMPTY><!ATTLIST e id ID #IMPLIED r IDREFS #IMPLIED t NMTOKEN #IMPLIED>]>"
+      "<doc><e id='a:b' t='x:y'/><e r='a:b'/></doc>";
+    for ( const bool kfUseXMLNamespaces : { true, false } )
+    {
+      CursorDocument< TyChar, true, true > doc( s_szDocument, nullptr, nullptr, kfUseXMLNamespaces );
+      ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+      ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+      (void)doc.m_cursor.FNextTag();
+      EXPECT_EQ( doc.m_cursor.FIsValid(), !kfUseXMLNamespaces );
+      EXPECT_EQ( doc.m_cursor.RgValidityErrors().size(), kfUseXMLNamespaces ? 2u : 0u );
+    }
+  }
+}
+
+// The variant parser is told of namespaces as the parser of one type of character is.
+TYPED_TEST( DtdTest, NamespacesOrNotOfVariantParser )
+{
+  typedef TypeParam TyChar;
+  typedef TyXmlParserVarDtd::_TyReadCursorVar TyReadCursorVar;
+  static const char s_szDocument[] = "<a:b:c x:y='1' :='2'><:d/></a:b:c>";
+  const std::basic_string< TyChar > strText = StrDocumentText< TyChar >( s_szDocument );
+  {
+    TyXmlParserVarDtd xmlParser;
+    xmlParser.SetUseXMLNamespaces( false );
+    TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strText.data(), strText.length() * sizeof( TyChar ) );
+    EXPECT_FALSE( cursor.FUseXMLNamespaces() );
+    EXPECT_EQ( StrNarrowExact( StrWriteFromAnyCursor< TyChar >( cursor ) ), s_szDocument );
+  }
+  {
+    TyXmlParserVarDtd xmlParser;
+    EXPECT_TRUE( xmlParser.FUseXMLNamespaces() );
+    TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strText.data(), strText.length() * sizeof( TyChar ) );
+    EXPECT_TRUE( cursor.FUseXMLNamespaces() );
+    EXPECT_ANY_THROW( (void)cursor.FMoveDown() );
+  }
 }
 
 // The W3C XML Conformance Test Suite - unittests/xmlconf: XMLP_XMLCONF_DIR is defined by the build.
@@ -3610,7 +3819,7 @@ EConformanceValidity ConformanceVerdict( t_TyCursor & _rcursor, std::string & _r
 // The external subset and the external entities of the document are read: they are files of the suite.
 // The document is read by the variant parser - in whichever encoding it is. One which is in UTF-8 is read as well by
 //  the parser of UTF-8, as the other tests read: the two must say the same.
-EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string & _rstrWhy )
+EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string & _rstrWhy, bool _fUseXMLNamespaces = true )
 {
   _rstrWhy.clear();
   std::ifstream ifs( _rpath, std::ios::binary );
@@ -3628,6 +3837,7 @@ EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string &
     TyXmlParserVarDtd xmlParser;
     xmlParser.SetReadExternalEntityFiles();
     xmlParser.SetBaseLocation( _rpath.generic_string() );
+    xmlParser.SetUseXMLNamespaces( _fUseXMLNamespaces );
     TyXmlParserVarDtd::_TyReadCursorVar cursor = xmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
     ecvVariant = std::visit(
       [&_rstrWhy]( auto & _tCursor ) -> EConformanceValidity
@@ -3644,7 +3854,7 @@ EConformanceValidity ConformanceValidate( fs::path const & _rpath, std::string &
   std::string strWhyUTF8;
   EConformanceValidity ecvUTF8 = ecvNotJudged;
   {
-    CursorDocument< char8_t, true, true > doc( strBytes.c_str(), &FReadExternalEntityFile< char8_t >, _rpath.generic_string().c_str() );
+    CursorDocument< char8_t, true, true > doc( strBytes.c_str(), &FReadExternalEntityFile< char8_t >, _rpath.generic_string().c_str(), _fUseXMLNamespaces );
     if ( !doc.FOpened() )
       strWhyUTF8 = "not opened: " + doc.m_strError;
     else
@@ -3668,8 +3878,18 @@ TEST( DtdConformance, ValidAndInvalidDocuments )
     {
       if ( std::string::npos != rstrFile.find( "/out/" ) )
         continue; // The canonical forms of the documents - not documents of the tests.
+      // The documents which the catalog of the suite says are not for a processor of namespaces ( NAMESPACE="no" ): they
+      //  have names which are not qualified names. They are read without namespaces - and with them they are an error.
+      static const std::set< std::string > s_setNotNamespaceWellFormed{ "xmltest/valid/sa/012.xml" };
+      const bool kfUseXMLNamespaces = !s_setNotNamespaceWellFormed.contains( rstrFile );
       std::string strWhy;
-      const EConformanceValidity ecv = ConformanceValidate( PathConformanceFile( rstrFile ), strWhy );
+      if ( !kfUseXMLNamespaces )
+      {
+        const EConformanceValidity ecvWith = ConformanceValidate( PathConformanceFile( rstrFile ), strWhy, true );
+        EXPECT_EQ( ecvWith, ecvNotJudged ) << rstrFile << " is not namespace-well-formed and was read with namespaces.";
+        EXPECT_NE( strWhy.find( "not namespace-well-formed" ), std::string::npos ) << rstrFile << ": " << strWhy;
+      }
+      const EConformanceValidity ecv = ConformanceValidate( PathConformanceFile( rstrFile ), strWhy, kfUseXMLNamespaces );
       if ( ecvNotJudged == ecv )
       {
         ++nNotJudged;
@@ -3687,9 +3907,187 @@ TEST( DtdConformance, ValidAndInvalidDocuments )
     return; // The suite is not here.
   // Those which are judged - so that it is noticed if they no longer are.
   std::cout << "[          ] judged: " << nValidJudged << " valid, " << nInvalidJudged << " not valid; not judged: " << nNotJudged << "\n";
-  EXPECT_GE( nValidJudged, 296u );
+  EXPECT_GE( nValidJudged, 297u );
   EXPECT_GE( nInvalidJudged, 128u );
-  EXPECT_LE( nNotJudged, 1u ); // 296, 128 and 1 when this was written: that one has an attribute named ':' - which is not a name with namespaces.
+  EXPECT_EQ( nNotJudged, 0u ); // 297 and 128 when this was written: all of them.
+}
+
+// Richard Tobin's tests of Namespaces in XML 1.0 - eduni/namespaces/1.0 of the suite: its catalog says of each document
+//  whether it is valid, well formed and not valid ( "invalid" ), not namespace-well-formed ( "not-wf" ) or has what a
+//  processor may or may not report ( "error" ).
+// Each document is a test of its own - named by its ID in the catalog - so that what fails says which document it is:
+//  - Read with namespaces by a validating cursor it must be found to be what the catalog says it is.
+//  - Read without namespaces it is a document of XML 1.0, and all but one of these are well formed ones: it is not an
+//    error - and it is valid or isn't as it is with namespaces, but for what is only namespace validity.
+//  - Either way, if it is read then what the writer writes from it is the same document when that is read.
+struct NamespaceSuiteTest
+{
+  std::string m_strUri; // The file - beside the catalog.
+  std::string m_strId;
+  std::string m_strType;
+};
+void PrintTo( NamespaceSuiteTest const & _rtest, std::ostream * _pos )
+{
+  *_pos << _rtest.m_strId << " ( " << _rtest.m_strUri << ", " << _rtest.m_strType << " )";
+}
+fs::path PathNamespaceSuite()
+{
+  return fs::path( XMLP_XMLCONF_DIR ) / "eduni" / "namespaces" / "1.0";
+}
+// The tests of the catalog - none if the suite is not here.
+std::vector< NamespaceSuiteTest > RgNamespaceSuiteTests()
+{
+  std::vector< NamespaceSuiteTest > rgTests;
+  std::ifstream ifsCatalog( PathNamespaceSuite() / "rmt-ns10.xml", std::ios::binary );
+  if ( !ifsCatalog )
+    return rgTests;
+  std::stringstream ssCatalog;
+  ssCatalog << ifsCatalog.rdbuf();
+  const std::string strCatalog = ssCatalog.str();
+  // The value of an attribute of the <TEST> which begins at _nPos.
+  auto StrAttribute = [&strCatalog]( size_t _nPos, const char * _pszName ) -> std::string
+  {
+    const size_t knPosEnd = strCatalog.find( '>', _nPos );
+    const std::string strFind = std::string( " " ) + _pszName + "=\"";
+    const size_t knPosAttr = strCatalog.find( strFind, _nPos );
+    if ( ( std::string::npos == knPosAttr ) || ( knPosAttr > knPosEnd ) )
+      return std::string();
+    const size_t knPosValue = knPosAttr + strFind.length();
+    return strCatalog.substr( knPosValue, strCatalog.find( '"', knPosValue ) - knPosValue );
+  };
+  for ( size_t nPos = strCatalog.find( "<TEST " ); std::string::npos != nPos; nPos = strCatalog.find( "<TEST ", nPos + 1 ) )
+    rgTests.push_back( NamespaceSuiteTest{ StrAttribute( nPos, "URI" ), StrAttribute( nPos, "ID" ), StrAttribute( nPos, "TYPE" ) } );
+  return rgTests;
+}
+// What reading a document of the suite found.
+struct NamespaceSuiteRead
+{
+  EConformanceValidity m_ecv{ ecvNotJudged };
+  bool m_fThrew{ false }; // Reading it threw: then it is not judged and m_strWhy is what was thrown.
+  std::string m_strWhy;
+  std::string m_strWritten; // What the writer wrote from it - in UTF-8 - if reading it didn't throw.
+  std::string m_strRoundTrip; // How what was written is not the same document - or that writing it threw: empty if nothing.
+};
+NamespaceSuiteRead ReadNamespaceSuiteDocument( fs::path const & _rpath, bool _fUseXMLNamespaces )
+{
+  NamespaceSuiteRead read;
+  std::ifstream ifs( _rpath, std::ios::binary );
+  std::stringstream ss;
+  ss << ifs.rdbuf();
+  const std::string strBytes = ss.str();
+  auto Open = [&]( TyXmlParserVarDtd & _rxmlParser )
+  {
+    _rxmlParser.SetReadExternalEntityFiles();
+    _rxmlParser.SetBaseLocation( _rpath.generic_string() );
+    _rxmlParser.SetUseXMLNamespaces( _fUseXMLNamespaces );
+    return _rxmlParser.OpenMemoryVar( strBytes.data(), strBytes.size() );
+  };
+  try
+  {
+    TyXmlParserVarDtd xmlParser;
+    TyXmlParserVarDtd::_TyReadCursorVar cursor = Open( xmlParser );
+    read.m_ecv = std::visit(
+      [&read]( auto & _tCursor ) -> EConformanceValidity
+      {
+        return ConformanceVerdict( _tCursor, read.m_strWhy );
+      }, cursor.GetVariant() );
+    read.m_fThrew = ( ecvNotJudged == read.m_ecv ) && ( 0 == read.m_strWhy.find( "not read:" ) );
+  }
+  catch ( std::exception const & rexc )
+  {
+    read.m_strWhy = std::string( "not opened: " ) + rexc.what();
+    read.m_fThrew = true;
+  }
+  if ( read.m_fThrew )
+    return read;
+  // Written from a cursor - and what was written is read: it is to be the same document.
+  try
+  {
+    {
+      TyXmlParserVarDtd xmlParser;
+      TyXmlParserVarDtd::_TyReadCursorVar cursor = Open( xmlParser );
+      const std::u8string strWritten = StrWriteFromAnyCursor< char8_t >( cursor );
+      read.m_strWritten.assign( strWritten.begin(), strWritten.end() );
+    }
+    TyXmlParserVarDtd xmlParser;
+    TyXmlParserVarDtd::_TyReadCursorVar cursor = Open( xmlParser );
+    CursorDocument< char8_t, true > docWritten( read.m_strWritten.c_str(), &FReadExternalEntityFile< char8_t >, _rpath.generic_string().c_str(), _fUseXMLNamespaces );
+    if ( !docWritten.FOpened() )
+      read.m_strRoundTrip = "what was written wasn't opened: " + docWritten.m_strError;
+    else
+    {
+      xml_compare_options options;
+      options.m_fCompareDoctypeDecl = true; // It is written as it was read.
+      std::string strDifference;
+      if ( !FCompareXmlDocuments( cursor, docWritten.m_cursor, options, &strDifference ) )
+        read.m_strRoundTrip = strDifference.empty() ? std::string( "what was written is another document" ) : strDifference;
+    }
+  }
+  catch ( std::exception const & rexc )
+  {
+    read.m_strRoundTrip = std::string( "exception: " ) + rexc.what();
+  }
+  return read;
+}
+
+class NamespacesInXml10 : public testing::TestWithParam< NamespaceSuiteTest >
+{
+};
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST( NamespacesInXml10 ); // The suite may not be here.
+
+TEST_P( NamespacesInXml10, Document )
+{
+  NamespaceSuiteTest const & rtest = GetParam();
+  ASSERT_FALSE( rtest.m_strUri.empty() || rtest.m_strType.empty() ) << "A test of the catalog which isn't understood.";
+  const fs::path pathFile = PathNamespaceSuite() / rtest.m_strUri;
+  const NamespaceSuiteRead read = ReadNamespaceSuiteDocument( pathFile, true );
+  const NamespaceSuiteRead readWithout = ReadNamespaceSuiteDocument( pathFile, false );
+  // Without namespaces it is a document of XML 1.0 - well formed, but for the one which has the same attribute twice.
+  static const std::set< std::string > s_setNotWellFormedWithoutNamespaces{ "035.xml" };
+  EXPECT_EQ( readWithout.m_fThrew, s_setNotWellFormedWithoutNamespaces.contains( rtest.m_strUri ) ) << "without namespaces: " << readWithout.m_strWhy;
+  EXPECT_EQ( readWithout.m_strRoundTrip, "" ) << "without namespaces - written:\n" << readWithout.m_strWritten;
+  if ( "valid" == rtest.m_strType )
+  {
+    EXPECT_EQ( read.m_ecv, ecvValid ) << "It is valid: " << read.m_strWhy;
+    EXPECT_EQ( readWithout.m_ecv, ecvValid ) << "It is valid - without namespaces: " << readWithout.m_strWhy;
+  }
+  else
+  if ( "invalid" == rtest.m_strType )
+  {
+    EXPECT_FALSE( read.m_fThrew ) << "It is namespace-well-formed: " << read.m_strWhy;
+    EXPECT_EQ( read.m_ecv, ecvNotValid ) << "It is well formed and not valid: " << read.m_strWhy;
+  }
+  else
+  if ( "not-wf" == rtest.m_strType )
+    EXPECT_TRUE( read.m_fThrew ) << "It is not namespace-well-formed and was read.";
+  else
+    EXPECT_EQ( rtest.m_strType, "error" ); // What a processor may report or not: nothing is required.
+  EXPECT_EQ( read.m_strRoundTrip, "" ) << "written:\n" << read.m_strWritten;
+}
+INSTANTIATE_TEST_SUITE_P( W3C, NamespacesInXml10, testing::ValuesIn( RgNamespaceSuiteTests() ),
+  []( testing::TestParamInfo< NamespaceSuiteTest > const & _rinfo )
+  {
+    // The ID of the catalog as the name of the test: the characters which a name of a test may have.
+    std::string strName = _rinfo.param.m_strId.empty() ? ( "test" + std::to_string( _rinfo.index ) ) : _rinfo.param.m_strId;
+    for ( char & rch : strName )
+      if ( !isalnum( (unsigned char)rch ) )
+        rch = '_';
+    return strName;
+  } );
+// All of the catalog is here.
+TEST( DtdConformance, NamespacesInXml10Catalog )
+{
+  const std::vector< NamespaceSuiteTest > rgTests = RgNamespaceSuiteTests();
+  if ( rgTests.empty() )
+    GTEST_SKIP() << "No tests of namespaces at " << PathNamespaceSuite().generic_string();
+  std::map< std::string, size_t > mapTypes;
+  for ( NamespaceSuiteTest const & rtest : rgTests )
+    ++mapTypes[ rtest.m_strType ];
+  EXPECT_EQ( rgTests.size(), 48u );
+  EXPECT_EQ( mapTypes[ "valid" ], 7u );
+  EXPECT_EQ( mapTypes[ "invalid" ], 17u );
+  EXPECT_EQ( mapTypes[ "not-wf" ], 21u );
+  EXPECT_EQ( mapTypes[ "error" ], 3u );
 }
 
 // The external subsets of the suite are read by xml_dtd_parser - with the external parameter entities which they refer

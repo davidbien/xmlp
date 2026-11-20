@@ -54,7 +54,17 @@ GenerateUTF16XmlLex( EGeneratorFamilyDisposition _egfdFamilyDisp, ns_pg::LexerMo
 	_TyFinal	LocalPart = NCName;
 
 // Qualified name:
-	_TyFinal	QName = t(TyGetTriggerPrefixBegin<_TyLexT>()) * Prefix * t(TyGetTriggerPrefixEnd<_TyLexT>()) * --( l(u':')	* t( TyGetTriggerLocalPartBegin<_TyLexT>() ) * LocalPart * t( TyGetTriggerLocalPartEnd<_TyLexT>() ) );
+	// The name of a tag or of an attribute: any Name [5] of XML, in two pieces for Namespaces in XML. The first piece is the
+	//  name up to its first colon which is not its first character; the second is what is after that colon - which may
+	//  be nothing: then there is no second piece, as there is none for a name which has no such colon.
+	// Whether the name is a QName [7] of Namespaces in XML - the first piece doesn't begin with a colon, and if the name has
+	//  that colon then the second piece is an NCName [4] - is for the cursor to say when namespaces are in use: without
+	//  them any Name is a name. ( This was the QName alone: a Name which is not one was then no token at all. )
+	// Both triggers of the second piece are reached whenever the name has the colon - also when nothing follows it: a
+	//  trigger which begins a piece and is left without its end is data which no token takes.
+	_TyFinal _NameFirstPiece = NameStartChar * ~NameCharNoColon;
+	_TyFinal QName = t(TyGetTriggerPrefixBegin<_TyLexT>()) * _NameFirstPiece * t(TyGetTriggerPrefixEnd<_TyLexT>()) *
+	                  --( l(u':') * t( TyGetTriggerLocalPartBegin<_TyLexT>() ) * ~NameChar * t( TyGetTriggerLocalPartEnd<_TyLexT>() ) );
 #if 0 // We have to rid these because they match the QName production and therefore they cause trigger confusion. We'll have to check in post-processing for xmlns as the prefix.
 	_TyFinal	DefaultAttName = ls(u"xmlns") /* * t( TyGetTriggerDefaultAttName<_TyLexT>() ) */;
 	_TyFinal	PrefixedAttName = ls(u"xmlns:") * t( TyGetTriggerPrefixedAttNameBegin<_TyLexT>() ) * NCName * t( TyGetTriggerPrefixedAttNameEnd<_TyLexT>() );
