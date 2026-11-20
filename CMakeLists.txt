@@ -187,6 +187,23 @@ target_compile_definitions( xmlpgtest_dtd
 )
 gtest_discover_tests(xmlpgtest_dtd)
 
+# The writer and the documents which it makes - not read but made: see the comments in xmlpgtest_writer.cpp.
+add_executable (xmlpgtest_writer xmlpgtest_writer.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
+target_include_directories(xmlpgtest_writer PUBLIC
+  ${CMAKE_CURRENT_BINARY_DIR}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/bienutil>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dgraph>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lexang>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/pgen>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/xmlpinc>
+)
+target_link_libraries(xmlpgtest_writer gtest)
+target_compile_definitions( xmlpgtest_writer
+  PUBLIC __NDEBUG_THROW
+  PUBLIC TRACESENABLED=0
+)
+gtest_discover_tests(xmlpgtest_writer)
+
 add_executable (xmltestsame xmltestsame.cpp ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf32.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf16.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlplex_utf8.h ${CMAKE_CURRENT_BINARY_DIR}/_xmlpdtd.h )
 #setup internal submodule include directories.
 target_include_directories(xmltestsame PUBLIC
