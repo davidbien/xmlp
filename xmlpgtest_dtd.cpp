@@ -3752,6 +3752,188 @@ TYPED_TEST( DtdTest, LimitsOfEntities )
   }
 }
 
+// How deep DeepNesting nests a content model: 100000, or XMLPTEST_DEEP_NESTING_DEPTH - to try it smaller first.
+size_t NDeepNestingDepth()
+{
+  const char * psz = getenv( "XMLPTEST_DEEP_NESTING_DEPTH" );
+  const size_t kn = !psz ? 0 : size_t( strtoull( psz, nullptr, 10 ) );
+  return !kn ? 100000 : kn;
+}
+// A content particle as it is written: "(a,(b|c)*)+" - made without calling a function for each level.
+template < class t_TyChar >
+std::string StrParticleTree( xml_dtd_content_particle< t_TyChar > const & _rcp )
+{
+  static const char * const s_rgpszOccurrence[] = { "", "?", "*", "+" };
+  std::string str;
+  // Each particle is begun when it is reached and ended once its children are: the stack has where we are in each.
+  std::vector< std::pair< const xml_dtd_content_particle< t_TyChar > *, size_t > > rgStack{ { &_rcp, 0 } };
+  for ( bool fBegun = false; !rgStack.empty(); )
+  {
+    auto & [ pcp, nChild ] = rgStack.back();
+    if ( !fBegun )
+    {
+      if ( exdpName == pcp->m_eParticle )
+      {
+        str += StrNarrow( pcp->m_strName ) + s_rgpszOccurrence[ pcp->m_eOccurrence ];
+        rgStack.pop_back();
+        fBegun = true;
+        continue;
+      }
+      str += "(";
+      fBegun = true;
+    }
+    if ( nChild < pcp->m_rgChildren.size() )
+    {
+      if ( nChild )
+        str += ( exdpChoice == pcp->m_eParticle ) ? "|" : ",";
+      const xml_dtd_content_particle< t_TyChar > * pcpChild = &pcp->m_rgChildren[ nChild++ ];
+      rgStack.push_back( { pcpChild, 0 } );
+      fBegun = false;
+      continue;
+    }
+    str += std::string( ")" ) + s_rgpszOccurrence[ pcp->m_eOccurrence ];
+    rgStack.pop_back();
+  }
+  return str;
+}
+
+// What is nested deeply: nothing is done with it by calling a function for each level - the stack of a thread is
+//  much smaller than a document may be.
+TYPED_TEST( DtdTest, DeepNesting )
+{
+  typedef TypeParam TyChar;
+  // Read all of a document: the count of its tags.
+  auto NWalk = []( auto & _rcursor ) -> size_t
+  {
+    size_t nTags = 0;
+    for ( size_t nDepth = 0; ; )
+    {
+      if ( _rcursor.FMoveDown() )
+      {
+        ++nDepth;
+        ++nTags;
+        continue;
+      }
+      if ( !nDepth )
+        break;
+      if ( _rcursor.FNextTag() )
+        ++nTags;
+      else
+        --nDepth;
+    }
+    return nTags;
+  };
+  // A content model of groups within groups: "(((...(b)...)))" - read, validated against and freed; copied.
+  {
+    const size_t knDepth = NDeepNestingDepth();
+    const std::string strDocument = "<!DOCTYPE doc [<!ELEMENT doc " + std::string( knDepth, '(' ) + "b" + std::string( knDepth, ')' ) + "><!ELEMENT b EMPTY>]>";
+    for ( const bool kfValidating : { false, true } )
+    {
+      for ( const char * pszContent : { "<doc><b/></doc>", "<doc></doc>" } )
+      {
+        const std::string strText = strDocument + pszContent;
+        size_t nTags = 0;
+        bool fValid = false;
+        std::string strError;
+        try
+        {
+          if ( kfValidating )
+          {
+            CursorDocument< TyChar, true, true > doc( strText.c_str() );
+            ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+            nTags = NWalk( doc.m_cursor );
+            fValid = doc.m_cursor.FIsValid();
+          }
+          else
+          {
+            CursorDocument< TyChar > doc( strText.c_str() );
+            ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+            nTags = NWalk( doc.m_cursor );
+          }
+        }
+        catch ( std::exception const & rexc )
+        {
+          strError = rexc.what();
+        }
+        EXPECT_EQ( strError, "" );
+        const bool kfHasB = ( std::string::npos != std::string( pszContent ).find( "<b/>" ) );
+        EXPECT_EQ( nTags, kfHasB ? 2u : 1u );
+        if ( kfValidating )
+          EXPECT_EQ( fValid, kfHasB ) << pszContent;
+      }
+    }
+    // A content particle made so - one name within knDepth groups: knDepth + 1 particles. Copied, assigned and freed.
+    xml_dtd_content_particle< TyChar > cp;
+    cp.m_strName = StrWiden< TyChar >( "b" );
+    for ( size_t n = 0; n < knDepth; ++n )
+    {
+      xml_dtd_content_particle< TyChar > cpGroup;
+      cpGroup.m_eParticle = ( n % 2 ) ? exdpChoice : exdpSeq;
+      cpGroup.m_rgChildren.push_back( std::move( cp ) );
+      cp = std::move( cpGroup );
+    }
+    xml_dtd_content_particle< TyChar > cpCopy( cp );
+    EXPECT_EQ( StrParticleTree( cpCopy ), StrParticleTree( cp ) );
+    cpCopy = xml_dtd_content_particle< TyChar >();
+    cpCopy = cp;
+    EXPECT_EQ( StrParticleTree( cpCopy ), StrParticleTree( cp ) );
+    size_t nDepth = 0;
+    for ( const xml_dtd_content_particle< TyChar > * pcp = &cpCopy; exdpName != pcp->m_eParticle; ++nDepth )
+    {
+      ASSERT_EQ( pcp->m_rgChildren.size(), 1u );
+      pcp = &pcp->m_rgChildren.front();
+    }
+    EXPECT_EQ( nDepth, knDepth );
+    cp = xml_dtd_content_particle< TyChar >();
+    EXPECT_TRUE( cp.m_rgChildren.empty() );
+  }
+  // A copy is the same tree when groups have more than one child: "(a,(b|c)*,(d,(e|f))?)+" - 11 particles.
+  {
+    auto Name = []( const char * _psz )
+    {
+      xml_dtd_content_particle< TyChar > cpName;
+      cpName.m_strName = StrWiden< TyChar >( _psz );
+      return cpName;
+    };
+    auto Group = []( EXmlDtdParticle _eParticle, EXmlDtdOccurrence _eOccurrence, std::vector< xml_dtd_content_particle< TyChar > > _rgChildren )
+    {
+      xml_dtd_content_particle< TyChar > cpGroup;
+      cpGroup.m_eParticle = _eParticle;
+      cpGroup.m_eOccurrence = _eOccurrence;
+      cpGroup.m_rgChildren = std::move( _rgChildren );
+      return cpGroup;
+    };
+    const xml_dtd_content_particle< TyChar > cp = Group( exdpSeq, exdoOneOrMore, { Name( "a" ), Group( exdpChoice, exdoZeroOrMore, { Name( "b" ), Name( "c" ) } ),
+      Group( exdpSeq, exdoOptional, { Name( "d" ), Group( exdpChoice, exdoOnce, { Name( "e" ), Name( "f" ) } ) } ) } );
+    EXPECT_EQ( StrParticleTree( cp ), "(a,(b|c)*,(d,(e|f))?)+" );
+    xml_dtd_content_particle< TyChar > cpCopy( cp );
+    EXPECT_EQ( StrParticleTree( cpCopy ), "(a,(b|c)*,(d,(e|f))?)+" );
+    xml_dtd_content_particle< TyChar > cpAssigned = Name( "z" );
+    cpAssigned = cpCopy;
+    EXPECT_EQ( StrParticleTree( cpAssigned ), "(a,(b|c)*,(d,(e|f))?)+" );
+  }
+  // Elements within elements: read and compared with themselves - one document after another. Each element which is
+  //  open is a context of the cursor: so not as deep as the content model.
+  {
+    const size_t knDepth = (std::min)( NDeepNestingDepth(), size_t( 5000 ) );
+    std::string strText = "<!DOCTYPE a [<!ELEMENT a (a?)>]>";
+    for ( size_t n = 0; n < knDepth; ++n )
+      strText += "<a>";
+    for ( size_t n = 0; n < knDepth; ++n )
+      strText += "</a>";
+    {
+      CursorDocument< TyChar > docLeft( strText.c_str() ), docRight( strText.c_str() );
+      ASSERT_TRUE( docLeft.FOpened() && docRight.FOpened() );
+      std::string strDifference;
+      EXPECT_TRUE( FCompareXmlDocuments( docLeft.m_cursor, docRight.m_cursor, xml_compare_options(), &strDifference ) ) << strDifference;
+    }
+    CursorDocument< TyChar, true, true > docValidating( strText.c_str() );
+    ASSERT_TRUE( docValidating.FOpened() ) << docValidating.m_strError;
+    EXPECT_EQ( NWalk( docValidating.m_cursor ), knDepth );
+    EXPECT_TRUE( docValidating.m_cursor.FIsValid() );
+  }
+}
+
 // The files which a document may have us read - xml_file_entity_options: by default only those which are where the
 //  document is.
 TEST( DtdExternalFiles, FilesWhichADocumentMayName )
