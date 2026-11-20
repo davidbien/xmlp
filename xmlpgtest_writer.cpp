@@ -85,15 +85,28 @@ std::basic_string< t_TyChar > StrOf( std::u32string_view _sv )
 //  they are asked for.
 template < class t_TyChar >
 using TyTestXmlWriter = xml_writer< typename map_input_to_any_output_transport< _l_transport_fixedmem< t_TyChar >, t_TyChar, false_type >::_TyXmlWriteTransport >;
+// What a writer has written to memory.
+template < class t_TyChar, class t_TyXmlWriter >
+std::basic_string< t_TyChar > StrWrittenBy( t_TyXmlWriter & _rxw )
+{
+  auto & rmsOut = _rxw.GetTransportOut().GetMemStream();
+  const size_t knbyWritten = (size_t)rmsOut.GetEndPos();
+  std::basic_string< t_TyChar > str( knbyWritten / sizeof( t_TyChar ), 0 );
+  rmsOut.Seek( 0, vkSeekBegin );
+  rmsOut.Read( str.data(), knbyWritten );
+  return str;
+}
 template < class t_TyChar >
 struct TestWriter
 {
   TyTestXmlWriter< t_TyChar > m_xw;
-  explicit TestWriter( bool _fUseNamespaces = true, bool _fWriteXMLDecl = false )
+  explicit TestWriter( bool _fUseNamespaces = true, bool _fWriteXMLDecl = false, const _xml_output_format * _pxof = nullptr )
   {
     m_xw.SetWriteBOM( false );
     m_xw.SetWriteXMLDecl( _fWriteXMLDecl );
     m_xw.SetUseNamespaces( _fUseNamespaces );
+    if ( !!_pxof )
+      m_xw.SetOutputFormat( *_pxof );
     m_xw.OpenMemFile();
   }
   TyTestXmlWriter< t_TyChar > * operator ->()
@@ -102,12 +115,7 @@ struct TestWriter
   }
   std::basic_string< t_TyChar > StrWritten()
   {
-    auto & rmsOut = m_xw.GetTransportOut().GetMemStream();
-    const size_t knbyWritten = (size_t)rmsOut.GetEndPos();
-    std::basic_string< t_TyChar > str( knbyWritten / sizeof( t_TyChar ), 0 );
-    rmsOut.Seek( 0, vkSeekBegin );
-    rmsOut.Read( str.data(), knbyWritten );
-    return str;
+    return StrWrittenBy< t_TyChar >( m_xw );
   }
   std::string StrNarrowWritten()
   {
@@ -522,6 +530,147 @@ TYPED_TEST( WriterTest, DoctypeDecl )
     tw->EndDocument();
     EXPECT_EQ( tw.StrNarrowWritten(), "<!DOCTYPE doc SYSTEM 'a\"b.dtd'><doc/>" );
   }
+}
+
+// Pretty printing - see xml_writer<>::SetOutputFormat().
+_xml_output_format XofPretty( int8_t _byNSpacesPerIndent = 2, size_t _nMaxIndentLevels = 32 )
+{
+  _xml_output_format xof;
+  xof.m_fNoFormatting = false;
+  xof.m_byNSpacesPerIndent = _byNSpacesPerIndent;
+  xof.m_nMaximumIndentLevelForWhitespace = _nMaxIndentLevels;
+  return xof;
+}
+template < class t_TyChar >
+std::basic_string< t_TyChar > StrWiden( const char * _psz )
+{
+  return std::basic_string< t_TyChar >( _psz, _psz + strlen( _psz ) );
+}
+// The document read and written pretty printed - as it was read: its XML declaration and its document type declaration.
+template < class t_TyChar >
+std::basic_string< t_TyChar > StrPrettyPrinted( std::basic_string< t_TyChar > const & _rstrText, _xml_output_format const & _rxof )
+{
+  ReadDocument< t_TyChar > doc( _rstrText );
+  VerifyThrowSz( doc.m_strError.empty(), "%s", doc.m_strError.c_str() );
+  TyTestXmlWriter< t_TyChar > xw;
+  xw.SetWriteBOM( false );
+  xw.SetWriteXMLDecl( !doc.m_cursor.FPseudoXMLDecl() );
+  xw.SetUseNamespaces( doc.m_cursor.FUseXMLNamespaces() );
+  xw.SetOutputFormat( _rxof );
+  typename TyTestXmlWriter< t_TyChar >::_TyXMLDeclProperties xdp( doc.m_cursor.GetXMLDeclProperties() );
+  xw.OpenMemFile( xdp, nullptr, !xdp.m_fHasEncoding );
+  VerifyThrow( xw.FPrettyPrint() );
+  xw.NWriteFromReadCursor( doc.m_cursor );
+  return StrWrittenBy< t_TyChar >( xw );
+}
+
+// A document which is made: each thing on a line of its own - but within an element which has text, and where
+//  xml:space="preserve" is in scope.
+TYPED_TEST( WriterTest, PrettyPrintMade )
+{
+  typedef TypeParam TyChar;
+  const _xml_output_format xof = XofPretty();
+  TestWriter< TyChar > tw( true, false, &xof );
+  ASSERT_TRUE( tw->FPrettyPrint() );
+  tw->WriteComment( "c" );
+  {
+    auto xwtDoc = tw->StartTag( "doc" );
+    xwtDoc.AddAttribute( "a", "1" );
+    {
+      auto xwtItem = tw->StartTag( "item" );
+      tw->WriteElement( "name", "x" );
+      tw->StartTag( "empty" ).EndTag();
+    }
+    tw->WriteProcessingInstruction( "pi", "" );
+    {
+      auto xwtMixed = tw->StartTag( "mixed" );
+      tw->WriteCharData( "text " );
+      {
+        auto xwtB = tw->StartTag( "b" );
+        tw->StartTag( "c" ).EndTag();
+      }
+      tw->WriteCharData( " more" );
+    }
+    {
+      auto xwtPre = tw->StartTag( "pre" );
+      xwtPre.AddAttribute( "xml:space", "preserve" );
+      tw->StartTag( "q" ).EndTag();
+    }
+    tw->WriteCharData( "\n   \n" ); // White space where the indentation is: it isn't written.
+  }
+  tw->WriteComment( "after" );
+  tw->EndDocument();
+  const std::basic_string< TyChar > strWritten = tw.StrWritten();
+  EXPECT_EQ( StrNarrow( strWritten ),
+    "<!--c-->\n"
+    "<doc a=\"1\">\n"
+    "  <item>\n"
+    "    <name>x</name>\n"
+    "    <empty/>\n"
+    "  </item>\n"
+    "  <?pi?>\n"
+    "  <mixed>text <b><c/></b> more</mixed>\n"
+    "  <pre xml:space=\"preserve\"><q/></pre>\n"
+    "</doc>\n"
+    "<!--after-->\n" );
+  ExpectDocument( strWritten );
+}
+
+// A document which is read, pretty printed: the white space between its markup is the indentation, the white space
+//  within its tags is a single space - and the rest is as it was.
+TYPED_TEST( WriterTest, PrettyPrintRead )
+{
+  typedef TypeParam TyChar;
+  const std::basic_string< TyChar > strText = StrWiden< TyChar >(
+    "<?xml version=\"1.0\"?>\n"
+    "<!DOCTYPE doc [<!ENTITY e 'v'>]>\n"
+    "<!-- before -->"
+    "<doc   a = 'x'\n  b='y'   ><item>  <sub/>\n</item  ><t>text &e; here</t>"
+    "<pre xml:space='preserve'>  <k/>  </pre><c><![CDATA[cd]]></c><!-- c --><?pi data?>\n\n</doc>\n" );
+  std::basic_string< TyChar > strPretty;
+  ASSERT_NO_THROW( strPretty = StrPrettyPrinted( strText, XofPretty() ) );
+  EXPECT_EQ( StrNarrow( strPretty ),
+    "<?xml version=\"1.0\"?>\n"
+    "<!DOCTYPE doc [<!ENTITY e 'v'>]>\n"
+    "<!-- before -->\n"
+    "<doc a='x' b='y'>\n"
+    "  <item>\n"
+    "    <sub/>\n"
+    "  </item>\n"
+    "  <t>text &e; here</t>\n"
+    "  <pre xml:space='preserve'>  <k/>  </pre>\n"
+    "  <c><![CDATA[cd]]></c>\n"
+    "  <!-- c -->\n"
+    "  <?pi data?>\n"
+    "</doc>\n" );
+  ExpectDocument( strPretty );
+  // Pretty printed again it is the same.
+  std::basic_string< TyChar > strPrettyAgain;
+  ASSERT_NO_THROW( strPrettyAgain = StrPrettyPrinted( strPretty, XofPretty() ) );
+  EXPECT_EQ( StrNarrow( strPrettyAgain ), StrNarrow( strPretty ) );
+}
+
+// The indentation: tabs, no indentation - only the lines - and a depth beyond which it is no deeper.
+TYPED_TEST( WriterTest, PrettyPrintIndent )
+{
+  typedef TypeParam TyChar;
+  auto StrWrite = []( _xml_output_format const & _rxof ) -> std::string
+  {
+    TestWriter< TyChar > tw( true, false, &_rxof );
+    {
+      auto xwtA = tw->StartTag( "a" );
+      auto xwtB = tw->StartTag( "b" );
+      tw->StartTag( "c" ).EndTag();
+    }
+    tw->EndDocument();
+    return tw.StrNarrowWritten();
+  };
+  EXPECT_EQ( StrWrite( XofPretty( -1 ) ), "<a>\n\t<b>\n\t\t<c/>\n\t</b>\n</a>\n" );
+  EXPECT_EQ( StrWrite( XofPretty( 0 ) ), "<a>\n<b>\n<c/>\n</b>\n</a>\n" );
+  EXPECT_EQ( StrWrite( XofPretty( 3 ) ), "<a>\n   <b>\n      <c/>\n   </b>\n</a>\n" );
+  EXPECT_EQ( StrWrite( XofPretty( 2, 1 ) ), "<a>\n  <b>\n  <c/>\n  </b>\n</a>\n" );
+  // Without formatting nothing is added.
+  EXPECT_EQ( StrWrite( _xml_output_format() ), "<a><b><c/></b></a>" );
 }
 
 } // namespace ns_XMLGTestWriter
