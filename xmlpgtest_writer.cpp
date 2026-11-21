@@ -532,6 +532,41 @@ TYPED_TEST( WriterTest, DoctypeDecl )
   }
 }
 
+// The document type declaration of a DTD which is made - in a type of character which is not the writer's.
+TYPED_TEST( WriterTest, DoctypeDeclOfDtd )
+{
+  typedef TypeParam TyChar;
+  xml_dtd< char32_t > dtd;
+  dtd.Edit( []( xml_dtd< char32_t > & _rdtd )
+    {
+      _rdtd.SetRootName( U"doc" );
+      xml_dtd_element< char32_t > element;
+      element.m_strName = U"doc";
+      element.m_eContent = exdcMixed;
+      _rdtd.SetElementDecl( element );
+      xml_dtd_entity< char32_t > entity;
+      entity.m_strName = U"e";
+      entity.m_strValue = U"v";
+      _rdtd.SetEntityDecl( entity );
+    } );
+  TestWriter< TyChar > tw;
+  tw->WriteDoctypeDecl( dtd );
+  {
+    auto xwtDoc = tw->StartTag( "doc" );
+    tw->WriteEntityReference( "e" );
+    EXPECT_ANY_THROW( tw->WriteEntityReference( "f" ) ); // Every declaration was read: it isn't declared.
+  }
+  tw->EndDocument();
+  EXPECT_EQ( tw.StrNarrowWritten(), "<!DOCTYPE doc [\n<!ELEMENT doc (#PCDATA)>\n<!ENTITY e \"v\">\n]><doc>&e;</doc>" );
+  ReadDocument< TyChar > doc( tw.StrWritten() );
+  ASSERT_EQ( doc.m_strError, "" );
+  ASSERT_TRUE( doc.m_cursor.FMoveDown() );
+  EXPECT_EQ( StrNarrow( doc.StrContent() ), "v" );
+  // A DTD which has no document type declaration isn't one.
+  TestWriter< TyChar > twNone;
+  EXPECT_ANY_THROW( twNone->WriteDoctypeDecl( xml_dtd< TyChar >() ) );
+}
+
 // Pretty printing - see xml_writer<>::SetOutputFormat().
 _xml_output_format XofPretty( int8_t _byNSpacesPerIndent = 2, size_t _nMaxIndentLevels = 32 )
 {

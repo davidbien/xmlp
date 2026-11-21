@@ -4121,6 +4121,430 @@ TYPED_TEST( DtdTest, DeepNesting )
 }
 
 // The encoding which a document declares is the one it is in - 4.3.3 - unless whoever opens it says not to hold it to that.
+// Editing the DTD - xml_dtd<>::Edit() and the others: the items which are edited are written from what they declare,
+//  the rest is the text it was, and the DTD is then read again.
+template < class t_TyChar >
+std::string StrDoctypeText( xml_dtd< t_TyChar > const & _rdtd )
+{
+  return StrNarrowExact( _rdtd.m_strDoctypeText );
+}
+// The index of the first item which is _eItem and names _pszName - npos if there is none.
+template < class t_TyChar >
+size_t NItemOf( xml_dtd< t_TyChar > const & _rdtd, EXmlDtdItem _eItem, const char * _pszName = "" )
+{
+  for ( size_t nItem = 0; nItem < _rdtd.m_rgItems.size(); ++nItem )
+    if ( ( _eItem == _rdtd.m_rgItems[ nItem ].m_eItem ) && ( StrNarrowExact( _rdtd.m_rgItems[ nItem ].m_strName ) == _pszName ) )
+      return nItem;
+  return size_t( -1 );
+}
+template < class t_TyChar >
+xml_dtd_element< t_TyChar > ElementOf( const char * _pszName, EXmlDtdContent _eContent )
+{
+  xml_dtd_element< t_TyChar > element;
+  element.m_strName = StrWiden< t_TyChar >( _pszName );
+  element.m_eContent = _eContent;
+  return element;
+}
+
+// A DTD which isn't edited is the text it was - and so is one which is edited with nothing.
+TYPED_TEST( DtdTest, EditNothing )
+{
+  typedef TypeParam TyChar;
+  static const char s_szDoctype[] = "<!DOCTYPE doc SYSTEM 'x.dtd' [\r\n  <!-- c -->\n<!ELEMENT doc ANY>  <?pi d?>\n%pe; <!ENTITY e 'x'>\n]  >";
+  xml_dtd< TyChar > dtd;
+  ASSERT_EQ( StrReadDtd( s_szDoctype, dtd ), "" );
+  EXPECT_EQ( StrDoctypeText( dtd ), s_szDoctype );
+  const size_t knItems = dtd.m_rgItems.size();
+  dtd.Edit( []( xml_dtd< TyChar > & ) {} );
+  EXPECT_EQ( StrDoctypeText( dtd ), s_szDoctype );
+  EXPECT_EQ( dtd.m_rgItems.size(), knItems );
+  EXPECT_TRUE( dtd.m_fStoppedProcessingDeclarations ); // The entity of %pe; isn't declared - it may be in the external subset, which wasn't read.
+  // What each declaration declares is its item's.
+  const size_t knElement = NItemOf( dtd, exdiElementDecl, "doc" );
+  ASSERT_NE( knElement, size_t( -1 ) );
+  ASSERT_TRUE( std::holds_alternative< xml_dtd_element< TyChar > >( dtd.m_rgItems[ knElement ].m_declaration ) );
+  EXPECT_EQ( std::get< xml_dtd_element< TyChar > >( dtd.m_rgItems[ knElement ].m_declaration ).m_eContent, exdcAny );
+  // The entity after the reference isn't declared - the declarations after it are not processed - but its item has it.
+  const size_t knEntity = NItemOf( dtd, exdiEntityDecl, "e" );
+  ASSERT_NE( knEntity, size_t( -1 ) );
+  EXPECT_TRUE( std::holds_alternative< xml_dtd_entity< TyChar > >( dtd.m_rgItems[ knEntity ].m_declaration ) );
+  EXPECT_EQ( dtd.PGetGeneralEntity( StrWiden< TyChar >( "e" ) ), nullptr );
+}
+
+// Declarations which are set and removed - and items which are inserted and removed.
+TYPED_TEST( DtdTest, EditDeclarations )
+{
+  typedef TypeParam TyChar;
+  typedef xml_dtd< TyChar > TyDtd;
+  typedef xml_dtd_item< TyChar > TyItem;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  TyDtd dtd;
+  ASSERT_EQ( StrReadDtd(
+    "<!DOCTYPE doc [\n"
+    "  <!-- c -->\n"
+    "  <!ELEMENT doc (a|b)*>\n"
+    "  <!ELEMENT a (#PCDATA)>\n"
+    "  <!ATTLIST a x CDATA #IMPLIED y (p|q) 'p'>\n"
+    "  <!ENTITY e \"text &amp; more\">\n"
+    "  <!NOTATION n PUBLIC 'pub'>\n"
+    "]>", dtd ), "" );
+  // A declaration of an element type which is declared is written in place of the one which was.
+  dtd.SetElementDecl( ElementOf< TyChar >( "a", exdcEmpty ) );
+  EXPECT_EQ( StrDoctypeText( dtd ),
+    "<!DOCTYPE doc [\n"
+    "  <!-- c -->\n"
+    "  <!ELEMENT doc (a|b)*>\n"
+    "  <!ELEMENT a EMPTY>\n"
+    "  <!ATTLIST a x CDATA #IMPLIED y (p|q) 'p'>\n"
+    "  <!ENTITY e \"text &amp; more\">\n"
+    "  <!NOTATION n PUBLIC 'pub'>\n"
+    "]>" );
+  ASSERT_NE( dtd.PGetElement( W( "a" ) ), nullptr );
+  EXPECT_EQ( dtd.PGetElement( W( "a" ) )->m_eContent, exdcEmpty );
+  // An attribute: the attribute-list declaration which has it is written again.
+  {
+    ASSERT_NE( dtd.PGetAttDef( W( "a" ), W( "y" ) ), nullptr );
+    xml_dtd_attdef< TyChar > attdef = *dtd.PGetAttDef( W( "a" ), W( "y" ) );
+    attdef.m_strDefault = W( "q" );
+    dtd.SetAttDef( W( "a" ), attdef );
+    EXPECT_TRUE( dtd.FRemoveAttDef( W( "a" ), W( "x" ) ) );
+    EXPECT_FALSE( dtd.FRemoveAttDef( W( "a" ), W( "x" ) ) );
+  }
+  EXPECT_EQ( dtd.PGetAttDef( W( "a" ), W( "x" ) ), nullptr );
+  ASSERT_NE( dtd.PGetAttDef( W( "a" ), W( "y" ) ), nullptr );
+  EXPECT_EQ( dtd.PGetAttDef( W( "a" ), W( "y" ) )->m_strDefaultValue, W( "q" ) );
+  // New declarations are at the end of the internal subset - indented as the one before; one which is removed is gone
+  //  with the white space before it.
+  xml_dtd_entity< TyChar > entity;
+  entity.m_strName = W( "e2" );
+  entity.m_strValue = W( "say \"hi\" & 'bye' &ent; &#38; 50% <x/>\r" ); // Its replacement text: the literal is made from it.
+  {
+    xml_dtd_element< TyChar > element = ElementOf< TyChar >( "b", exdcMixed );
+    element.m_rgstrMixedNames = { W( "a" ) };
+    dtd.SetElementDecl( element );
+    dtd.SetEntityDecl( entity );
+    EXPECT_TRUE( dtd.FRemoveEntityDecl( W( "e" ) ) );
+    EXPECT_FALSE( dtd.FRemoveEntityDecl( W( "e" ) ) );
+    EXPECT_FALSE( dtd.FRemoveEntityDecl( W( "e2" ), true ) ); // Not a parameter entity.
+    xml_dtd_notation< TyChar > notation;
+    notation.m_strName = W( "n" );
+    notation.m_externalId.m_optstrSystem.emplace( W( "n's.txt" ) );
+    dtd.SetNotationDecl( notation );
+  }
+  static const char s_szEdited[] =
+    "<!DOCTYPE doc [\n"
+    "  <!-- c -->\n"
+    "  <!ELEMENT doc (a|b)*>\n"
+    "  <!ELEMENT a EMPTY>\n"
+    "  <!ATTLIST a y (p|q) \"q\">\n"
+    "  <!NOTATION n SYSTEM \"n's.txt\">\n"
+    "  <!ELEMENT b (#PCDATA|a)*>\n"
+    "  <!ENTITY e2 \"say &#34;hi&#34; &#38; 'bye' &ent; &#38;#38; 50&#37; <x/>&#13;\">\n"
+    "]>";
+  EXPECT_EQ( StrDoctypeText( dtd ), s_szEdited );
+  ASSERT_NE( dtd.PGetGeneralEntity( W( "e2" ) ), nullptr );
+  EXPECT_EQ( dtd.PGetGeneralEntity( W( "e2" ) )->m_strValue, entity.m_strValue );
+  EXPECT_EQ( dtd.PGetGeneralEntity( W( "e" ) ), nullptr );
+  ASSERT_NE( dtd.PGetNotation( W( "n" ) ), nullptr );
+  EXPECT_FALSE( dtd.PGetNotation( W( "n" ) )->m_externalId.m_optstrPublic.has_value() );
+  ASSERT_NE( dtd.PGetElement( W( "b" ) ), nullptr );
+  EXPECT_EQ( StrJoin( dtd.PGetElement( W( "b" ) )->m_rgstrMixedNames ), "a" );
+  // Items - within one edit: the DTD is read again once, after them. The comment which is removed is the first item:
+  //  the white space after the '[' is that of the comment which is inserted before the next.
+  dtd.Edit( [&]( TyDtd & _rdtd )
+    {
+      _rdtd.RemoveItem( NItemOf( _rdtd, exdiComment ) );
+      _rdtd.InsertItem( NItemOf( _rdtd, exdiElementDecl, "doc" ), TyItem::Comment( W( " the document " ) ) );
+      _rdtd.InsertItem( size_t( -1 ), TyItem::ProcessingInstruction( W( "pi" ), W( "data" ) ) );
+      _rdtd.InsertItem( size_t( -1 ), TyItem::ProcessingInstruction( W( "pi2" ) ) );
+      EXPECT_EQ( _rdtd.PGetElement( W( "doc" ) )->m_eContent, exdcChildren ); // The maps are as they were within the edit.
+    } );
+  EXPECT_EQ( StrDoctypeText( dtd ),
+    "<!DOCTYPE doc [\n"
+    "  <!-- the document -->\n"
+    "  <!ELEMENT doc (a|b)*>\n"
+    "  <!ELEMENT a EMPTY>\n"
+    "  <!ATTLIST a y (p|q) \"q\">\n"
+    "  <!NOTATION n SYSTEM \"n's.txt\">\n"
+    "  <!ELEMENT b (#PCDATA|a)*>\n"
+    "  <!ENTITY e2 \"say &#34;hi&#34; &#38; 'bye' &ent; &#38;#38; 50&#37; <x/>&#13;\">\n"
+    "  <?pi data?>\n"
+    "  <?pi2?>\n"
+    "]>" );
+  // The items are as they are read: the processing instructions are where they are in the text.
+  const size_t knPI = NItemOf( dtd, exdiProcessingInstruction, "pi" );
+  ASSERT_NE( knPI, size_t( -1 ) );
+  EXPECT_EQ( StrNarrowExact( dtd.m_rgItems[ knPI ].m_strData ), "data" );
+  EXPECT_EQ( dtd.m_strDoctypeText.substr( dtd.m_rgItems[ knPI ].m_nPos, dtd.m_rgItems[ knPI ].m_nLength ), W( "<?pi data?>" ) );
+  // Each item removed: the white space before each is gone with it.
+  dtd.Edit( [&]( TyDtd & _rdtd )
+    {
+      for ( size_t nItem = 0; nItem < _rdtd.m_rgItems.size(); ++nItem )
+        _rdtd.RemoveItem( nItem );
+    } );
+  EXPECT_EQ( StrDoctypeText( dtd ), "<!DOCTYPE doc [\n]>" );
+  EXPECT_TRUE( dtd.m_rgItems.empty() );
+  EXPECT_TRUE( dtd.m_mapElements.empty() );
+  EXPECT_TRUE( dtd.m_mapAttLists.empty() );
+}
+
+// Content models as deep as they are.
+TYPED_TEST( DtdTest, EditContentModels )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  xml_dtd< TyChar > dtdFrom;
+  ASSERT_EQ( StrReadDtd( "<!DOCTYPE x [<!ELEMENT x ( ( a , ( b | c )+ )? , d* )><!ELEMENT z (a)><!ELEMENT w (#PCDATA)><!ELEMENT v ( a | b )>]>", dtdFrom ), "" );
+  xml_dtd< TyChar > dtd;
+  ASSERT_EQ( StrReadDtd( "<!DOCTYPE x []>", dtd ), "" );
+  for ( const char * psz : { "x", "z", "w", "v" } )
+  {
+    ASSERT_NE( dtdFrom.PGetElement( W( psz ) ), nullptr ) << psz;
+    dtd.SetElementDecl( *dtdFrom.PGetElement( W( psz ) ) );
+  }
+  EXPECT_EQ( StrDoctypeText( dtd ), "<!DOCTYPE x [\n<!ELEMENT x ((a,(b|c)+)?,d*)>\n<!ELEMENT z (a)>\n<!ELEMENT w (#PCDATA)>\n<!ELEMENT v (a|b)>\n]>" );
+  for ( const char * psz : { "x", "z", "v" } )
+  {
+    ASSERT_NE( dtd.PGetElement( W( psz ) ), nullptr ) << psz;
+    EXPECT_EQ( StrContentParticle( dtd.PGetElement( W( psz ) )->m_cpChildren ), StrContentParticle( dtdFrom.PGetElement( W( psz ) )->m_cpChildren ) ) << psz;
+  }
+  // A content model which isn't a choice or a sequence isn't one.
+  {
+    xml_dtd_element< TyChar > element = ElementOf< TyChar >( "y", exdcChildren );
+    element.m_cpChildren.m_strName = W( "a" );
+    EXPECT_ANY_THROW( dtd.SetElementDecl( element ) );
+    EXPECT_EQ( dtd.PGetElement( W( "y" ) ), nullptr );
+  }
+  // Deep: it is written as deep as it is - not by calling a function for each level.
+  {
+    const size_t knDepth = NDeepNestingDepth();
+    const std::string strDocument = "<!DOCTYPE doc [<!ELEMENT doc " + std::string( knDepth, '(' ) + "b" + std::string( knDepth, ')' ) + "><!ELEMENT b EMPTY>]>";
+    xml_dtd< TyChar > dtdDeep;
+    ASSERT_EQ( StrReadDtd( strDocument.c_str(), dtdDeep ), "" );
+    xml_dtd< TyChar > dtdTo;
+    dtdTo.Edit( [&]( xml_dtd< TyChar > & _rdtd )
+      {
+        _rdtd.SetRootName( W( "doc" ) );
+        _rdtd.SetElementDecl( *dtdDeep.PGetElement( W( "doc" ) ) );
+      } );
+    EXPECT_EQ( StrDoctypeText( dtdTo ), "<!DOCTYPE doc [\n<!ELEMENT doc " + std::string( knDepth, '(' ) + "b" + std::string( knDepth, ')' ) + ">\n]>" );
+    ASSERT_NE( dtdTo.PGetElement( W( "doc" ) ), nullptr );
+  }
+}
+
+// What may not be edited, and edits which would leave the DTD not well formed: they throw and the DTD is as it was.
+TYPED_TEST( DtdTest, EditErrors )
+{
+  typedef TypeParam TyChar;
+  typedef xml_dtd< TyChar > TyDtd;
+  typedef xml_dtd_item< TyChar > TyItem;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  TyDtd dtd;
+  ASSERT_EQ( StrReadDtd( "<!DOCTYPE d [<!ENTITY % p \"<!ELEMENT d ANY>\"> %p;]>", dtd ), "" );
+  const std::string kstrWas = StrDoctypeText( dtd );
+  auto ExpectAsItWas = [&]( int _nLine )
+  {
+    EXPECT_EQ( StrDoctypeText( dtd ), kstrWas ) << _nLine;
+    EXPECT_NE( dtd.PGetElement( W( "d" ) ), nullptr ) << _nLine;
+    EXPECT_NE( dtd.PGetParameterEntity( W( "p" ) ), nullptr ) << _nLine;
+    EXPECT_EQ( dtd.m_rgItems.size(), 3u ) << _nLine;
+  };
+  // The reference to it would be left with no declaration before it.
+  EXPECT_ANY_THROW( dtd.FRemoveEntityDecl( W( "p" ), true ) );
+  ExpectAsItWas( __LINE__ );
+  // A reference before its declaration.
+  EXPECT_ANY_THROW( dtd.InsertItem( 0, TyItem::ParameterEntityReference( W( "p" ) ) ) );
+  ExpectAsItWas( __LINE__ );
+  // What is in the text of the entity isn't edited.
+  EXPECT_ANY_THROW( dtd.RemoveItem( NItemOf( dtd, exdiElementDecl, "d" ) ) );
+  EXPECT_ANY_THROW( dtd.SetElementDecl( ElementOf< TyChar >( "d", exdcEmpty ) ) );
+  EXPECT_ANY_THROW( dtd.InsertItem( NItemOf( dtd, exdiElementDecl, "d" ), TyItem::Comment( W( "c" ) ) ) );
+  EXPECT_ANY_THROW( dtd.RemoveItem( 3 ) ); // There isn't one.
+  ExpectAsItWas( __LINE__ );
+  // Not well formed.
+  EXPECT_ANY_THROW( dtd.InsertItem( size_t( -1 ), TyItem::Comment( W( "a--b" ) ) ) );
+  EXPECT_ANY_THROW( dtd.InsertItem( size_t( -1 ), TyItem::ProcessingInstruction( W( "xml" ) ) ) );
+  EXPECT_ANY_THROW( dtd.InsertItem( size_t( -1 ), TyItem::ProcessingInstruction( W( "pi" ), W( "?>" ) ) ) );
+  EXPECT_ANY_THROW( dtd.SetElementDecl( ElementOf< TyChar >( "1x", exdcEmpty ) ) );
+  EXPECT_ANY_THROW( dtd.InsertItem( size_t( -1 ), TyItem::ParameterEntityReference( W( "p q" ) ) ) );
+  {
+    xml_dtd_notation< TyChar > notation;
+    notation.m_strName = W( "n" );
+    EXPECT_ANY_THROW( dtd.SetNotationDecl( notation ) ); // No identifier.
+    notation.m_externalId.m_optstrSystem.emplace( W( "a'b\"c" ) );
+    EXPECT_ANY_THROW( dtd.SetNotationDecl( notation ) ); // A system literal with both quotes.
+  }
+  {
+    xml_dtd_entity< TyChar > entity;
+    entity.m_strName = W( "e" );
+    entity.m_fInternal = false;
+    entity.m_externalId.m_optstrPublic.emplace( W( "pub" ) );
+    EXPECT_ANY_THROW( dtd.SetEntityDecl( entity ) ); // A public identifier without a system identifier.
+    entity.m_fInternal = true;
+    entity.m_strValue = W( "<" );
+    xml_dtd_attdef< TyChar > attdef;
+    attdef.m_strName = W( "a" );
+    attdef.m_eDefault = exdadDefault;
+    attdef.m_strDefault = W( "&e;" );
+    // Well formed alone - but not the default of an attribute which refers to an entity with a '<'.
+    EXPECT_ANY_THROW( dtd.Edit( [&]( TyDtd & _rdtd )
+      {
+        _rdtd.SetEntityDecl( entity );
+        _rdtd.SetAttDef( W( "d" ), attdef );
+      } ) );
+  }
+  ExpectAsItWas( __LINE__ );
+  // Anything which throws within an edit: the DTD is as it was.
+  EXPECT_ANY_THROW( dtd.Edit( [&]( TyDtd & _rdtd )
+    {
+      _rdtd.SetElementDecl( ElementOf< TyChar >( "x", exdcAny ) );
+      throw std::runtime_error( "no" );
+    } ) );
+  ExpectAsItWas( __LINE__ );
+  EXPECT_EQ( dtd.PGetElement( W( "x" ) ), nullptr );
+  // The entity and the reference to it at once: there is nothing left. ( Removed items keep their indices within the edit. )
+  dtd.Edit( [&]( TyDtd & _rdtd )
+    {
+      _rdtd.RemoveItem( NItemOf( _rdtd, exdiParameterEntityReference, "p" ) );
+      EXPECT_TRUE( _rdtd.FRemoveEntityDecl( W( "p" ), true ) );
+    } );
+  EXPECT_EQ( StrDoctypeText( dtd ), "<!DOCTYPE d []>" );
+  EXPECT_EQ( dtd.PGetElement( W( "d" ) ), nullptr );
+  EXPECT_TRUE( dtd.m_rgItems.empty() );
+}
+
+// The name of the document's element type and the external identifier - and a DTD which is made.
+TYPED_TEST( DtdTest, EditDoctypeHeader )
+{
+  typedef TypeParam TyChar;
+  typedef xml_dtd< TyChar > TyDtd;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  TyDtd dtd;
+  ASSERT_EQ( StrReadDtd( "<!DOCTYPE a SYSTEM \"a[1].dtd\" >", dtd ), "" );
+  // An internal subset is made: before the white space before the '>'.
+  dtd.SetElementDecl( ElementOf< TyChar >( "a", exdcAny ) );
+  EXPECT_EQ( StrDoctypeText( dtd ), "<!DOCTYPE a SYSTEM \"a[1].dtd\" [\n<!ELEMENT a ANY>\n] >" );
+  dtd.Edit( [&]( TyDtd & _rdtd )
+    {
+      _rdtd.SetRootName( W( "b" ) );
+      _rdtd.SetExternalId( std::nullopt );
+    } );
+  EXPECT_EQ( StrDoctypeText( dtd ), "<!DOCTYPE b [\n<!ELEMENT a ANY>\n] >" );
+  EXPECT_EQ( StrNarrowExact( dtd.m_strRootName ), "b" );
+  EXPECT_FALSE( dtd.m_optExternalId.has_value() );
+  {
+    xml_dtd_external_id< TyChar > externalId;
+    externalId.m_optstrPublic.emplace( W( "-//test//b" ) );
+    externalId.m_optstrSystem.emplace( W( "b.dtd" ) );
+    dtd.SetExternalId( externalId );
+  }
+  EXPECT_EQ( StrDoctypeText( dtd ), "<!DOCTYPE b PUBLIC \"-//test//b\" \"b.dtd\" [\n<!ELEMENT a ANY>\n] >" );
+  ASSERT_TRUE( dtd.m_optExternalId.has_value() );
+  EXPECT_EQ( *dtd.m_optExternalId->m_optstrSystem, W( "b.dtd" ) );
+  EXPECT_FALSE( dtd.m_fExternalSubsetRead ); // It isn't read: there is nothing which reads it.
+  EXPECT_ANY_THROW( dtd.SetRootName( W( "1b" ) ) );
+  EXPECT_EQ( StrNarrowExact( dtd.m_strRootName ), "b" );
+  // A DTD which wasn't read - which is made.
+  TyDtd dtdMade;
+  EXPECT_ANY_THROW( dtdMade.SetElementDecl( ElementOf< TyChar >( "doc", exdcAny ) ) ); // There is no name for its "<!DOCTYPE".
+  EXPECT_TRUE( dtdMade.m_strDoctypeText.empty() );
+  dtdMade.SetRootName( W( "doc" ) );
+  EXPECT_EQ( StrDoctypeText( dtdMade ), "<!DOCTYPE doc>" );
+  dtdMade.SetElementDecl( ElementOf< TyChar >( "doc", exdcEmpty ) );
+  EXPECT_EQ( StrDoctypeText( dtdMade ), "<!DOCTYPE doc [\n<!ELEMENT doc EMPTY>\n]>" );
+  ASSERT_NE( dtdMade.PGetElement( W( "doc" ) ), nullptr );
+}
+
+// A DTD with an external subset: what is there is as it was - and isn't had again.
+TYPED_TEST( DtdTest, EditWithExternalSubset )
+{
+  typedef TypeParam TyChar;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  TestEntities entities;
+  entities.m_mapEntities[ "doc.dtd" ] = "<!ELEMENT doc (#PCDATA)>\n<!ATTLIST doc a CDATA 'ext'>\n<!ENTITY % pe SYSTEM 'pe.ent'>\n%pe;";
+  entities.m_mapEntities[ "pe.ent" ] = "<!ENTITY fromPe 'p'>";
+  CursorDocument< TyChar > doc( "<!DOCTYPE doc SYSTEM 'doc.dtd' [<!ENTITY e 'x'>]><doc/>", entities.Resolver< TyChar >(), "doc.xml" );
+  ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+  xml_dtd< TyChar > dtd = doc.m_cursor.GetDtd();
+  const size_t knAsked = entities.m_rgstrAsked.size();
+  EXPECT_EQ( knAsked, 2u );
+  EXPECT_EQ( dtd.m_rgExternalTexts.size(), 2u );
+  xml_dtd_entity< TyChar > entity;
+  entity.m_strName = W( "e2" );
+  entity.m_strValue = W( "y" );
+  dtd.SetEntityDecl( entity );
+  EXPECT_EQ( StrDoctypeText( dtd ), "<!DOCTYPE doc SYSTEM 'doc.dtd' [<!ENTITY e 'x'>\n<!ENTITY e2 \"y\">]>" );
+  EXPECT_EQ( entities.m_rgstrAsked.size(), knAsked ); // What was read was read from what the DTD has of it.
+  EXPECT_TRUE( dtd.m_fExternalSubsetRead );
+  EXPECT_TRUE( dtd.FAllDeclarationsRead() );
+  ASSERT_NE( dtd.PGetAttDef( W( "doc" ), W( "a" ) ), nullptr );
+  EXPECT_EQ( dtd.PGetAttDef( W( "doc" ), W( "a" ) )->m_strDefaultValue, W( "ext" ) );
+  EXPECT_NE( dtd.PGetGeneralEntity( W( "fromPe" ) ), nullptr );
+  EXPECT_NE( dtd.PGetGeneralEntity( W( "e2" ) ), nullptr );
+  ASSERT_NE( dtd.PGetGeneralEntity( W( "fromPe" ) ), nullptr );
+  EXPECT_EQ( StrNarrowExact( dtd.PGetGeneralEntity( W( "fromPe" ) )->m_strBase ), "pe.ent" ); // Where it was declared.
+  // What is declared there isn't edited - an attribute which isn't declared is, in the internal subset.
+  EXPECT_ANY_THROW( dtd.SetElementDecl( ElementOf< TyChar >( "doc", exdcAny ) ) );
+  EXPECT_ANY_THROW( dtd.FRemoveAttDef( W( "doc" ), W( "a" ) ) );
+  EXPECT_ANY_THROW( dtd.RemoveItem( NItemOf( dtd, exdiEntityDecl, "fromPe" ) ) );
+  {
+    xml_dtd_attdef< TyChar > attdef;
+    attdef.m_strName = W( "b" );
+    attdef.m_eType = exdatNMTOKEN;
+    attdef.m_eDefault = exdadFixed;
+    attdef.m_strDefault = W( " int " );
+    dtd.SetAttDef( W( "doc" ), attdef );
+  }
+  EXPECT_EQ( StrDoctypeText( dtd ), "<!DOCTYPE doc SYSTEM 'doc.dtd' [<!ENTITY e 'x'>\n<!ENTITY e2 \"y\">\n<!ATTLIST doc b NMTOKEN #FIXED \" int \">]>" );
+  ASSERT_NE( dtd.PGetAttDef( W( "doc" ), W( "b" ) ), nullptr );
+  EXPECT_EQ( dtd.PGetAttDef( W( "doc" ), W( "b" ) )->m_strDefaultValue, W( "int" ) );
+  EXPECT_FALSE( dtd.PGetAttDef( W( "doc" ), W( "b" ) )->m_fDeclaredExternally );
+  EXPECT_EQ( entities.m_rgstrAsked.size(), knAsked );
+}
+
+// An edited DTD is what is written in place of the document's: the document is then that of the edited DTD.
+TYPED_TEST( DtdTest, EditedDtdIsWritten )
+{
+  typedef TypeParam TyChar;
+  typedef TyTestXmlWriter< TyChar > TyXmlWriter;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  CursorDocument< TyChar > doc( "<!DOCTYPE doc [<!ENTITY e 'x'>]><doc>&e;<!-- c --></doc>" );
+  ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+  xml_dtd< TyChar > dtd = doc.m_cursor.GetDtd();
+  xml_dtd_entity< TyChar > entity;
+  entity.m_strName = W( "e" );
+  entity.m_strValue = W( "y" );
+  dtd.SetEntityDecl( entity );
+  std::basic_string< TyChar > strWritten;
+  {
+    TyXmlWriter xwWriter;
+    xwWriter.SetWriteBOM( false );
+    xwWriter.SetWriteXMLDecl( false );
+    xwWriter.SetDoctypeDeclToWrite( dtd );
+    dtd.FRemoveEntityDecl( W( "e" ) ); // What is written is what it was when it was given to the writer.
+    xwWriter.OpenMemFile();
+    xwWriter.NWriteFromReadCursor( doc.m_cursor );
+    strWritten = StrWritten< TyChar >( xwWriter );
+  }
+  EXPECT_EQ( StrNarrowExact( strWritten ), "<!DOCTYPE doc [<!ENTITY e \"y\">]><doc>&e;<!-- c --></doc>" );
+  std::string strNarrow = StrNarrowExact( strWritten );
+  CursorDocument< TyChar > docWritten( strNarrow.c_str() );
+  ASSERT_TRUE( docWritten.FOpened() ) << docWritten.m_strError;
+  ASSERT_TRUE( docWritten.m_cursor.FMoveDown() );
+  EXPECT_EQ( StrNarrow( docWritten.StrContent() ), "y" );
+  // A DTD written by itself.
+  {
+    TyXmlWriter xwWriter;
+    xwWriter.SetWriteBOM( false );
+    xwWriter.SetWriteXMLDecl( false );
+    xwWriter.OpenMemFile();
+    xwWriter.WriteDoctypeDecl( dtd );
+    xwWriter.WriteElement( "doc", "" );
+    xwWriter.EndDocument();
+    EXPECT_EQ( StrNarrowExact( StrWritten< TyChar >( xwWriter ) ), "<!DOCTYPE doc []><doc/>" );
+  }
+}
+
 TYPED_TEST( DtdTest, DeclaredEncoding )
 {
   typedef TypeParam TyChar;
