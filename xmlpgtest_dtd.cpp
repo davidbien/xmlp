@@ -4545,6 +4545,83 @@ TYPED_TEST( DtdTest, EditedDtdIsWritten )
   }
 }
 
+// Validation of what is written from a read cursor - see xml_writer<>::SetValidate(): against the DTD of the cursor, all
+//  of it - or against that which is written in place of the document's.
+TYPED_TEST( DtdTest, ValidateWhatIsWrittenFromCursor )
+{
+  typedef TypeParam TyChar;
+  typedef TyTestXmlWriter< TyChar > TyXmlWriter;
+  auto W = []( const char * _psz ) { return StrWiden< TyChar >( _psz ); };
+  TestEntities entities;
+  entities.m_mapEntities[ "doc.dtd" ] = "<!ELEMENT doc (a+)>\n<!ELEMENT a (#PCDATA|b)*>\n<!ELEMENT b EMPTY>\n<!ATTLIST a id ID #IMPLIED>";
+  static const char s_szValid[] = "<!DOCTYPE doc SYSTEM 'doc.dtd' [<!ENTITY m '<b/>t'>]><doc><a id='x'>t&m;<!-- c --></a>\n<a/></doc>";
+  struct Written
+  {
+    std::string m_strResult; // "valid", "not valid" - or why the document wasn't read.
+    std::vector< std::string > m_rgstrErrors;
+    bool m_fIncomplete{ false };
+    std::basic_string< TyChar > m_strWritten;
+  };
+  auto WriteValidated = [&]( const char * _pszDocument, const xml_dtd< TyChar > * _pdtdToWrite = nullptr ) -> Written
+  {
+    Written written;
+    CursorDocument< TyChar > doc( _pszDocument, entities.Resolver< TyChar >(), "doc.xml" );
+    if ( !doc.FOpened() )
+    {
+      written.m_strResult = "not read: " + doc.m_strError;
+      return written;
+    }
+    TyXmlWriter xw;
+    xw.SetWriteBOM( false );
+    xw.SetWriteXMLDecl( false );
+    xw.SetValidate();
+    if ( !!_pdtdToWrite )
+      xw.SetDoctypeDeclToWrite( *_pdtdToWrite );
+    xw.OpenMemFile();
+    xw.NWriteFromReadCursor( doc.m_cursor );
+    written.m_strResult = xw.FIsValid() ? "valid" : "not valid";
+    written.m_rgstrErrors = xw.RgValidityErrors();
+    written.m_fIncomplete = xw.FValidationIncomplete();
+    written.m_strWritten = StrWritten< TyChar >( xw );
+    return written;
+  };
+  auto StrErrors = []( Written const & _rwritten )
+  {
+    std::string str;
+    for ( std::string const & rstr : _rwritten.m_rgstrErrors )
+      str += rstr + "\n";
+    return str;
+  };
+  // Valid: the external subset is known - it is the cursor's - and so is what the entity with markup has.
+  {
+    const Written written = WriteValidated( s_szValid );
+    EXPECT_EQ( written.m_strResult, "valid" ) << StrErrors( written );
+    EXPECT_FALSE( written.m_fIncomplete );
+    EXPECT_EQ( StrNarrowExact( written.m_strWritten ), s_szValid );
+  }
+  // Not valid: a <b> where an <a> is to be; an <a> with an <a> in it.
+  {
+    const Written written = WriteValidated( "<!DOCTYPE doc SYSTEM 'doc.dtd'><doc><b/><a><a/></a></doc>" );
+    EXPECT_EQ( written.m_strResult, "not valid" );
+    EXPECT_EQ( written.m_rgstrErrors.size(), 2u ) << StrErrors( written );
+    EXPECT_FALSE( written.m_fIncomplete );
+  }
+  // The DTD which is written in place of the document's: the document is valid against that or it isn't.
+  {
+    CursorDocument< TyChar > doc( s_szValid, entities.Resolver< TyChar >(), "doc.xml" );
+    ASSERT_TRUE( doc.FOpened() ) << doc.m_strError;
+    xml_dtd< TyChar > dtd = doc.m_cursor.GetDtd();
+    xml_dtd_attdef< TyChar > attdef;
+    attdef.m_strName = W( "r" );
+    attdef.m_eDefault = exdadRequired;
+    dtd.SetAttDef( W( "a" ), attdef );
+    const Written written = WriteValidated( s_szValid, &dtd );
+    EXPECT_EQ( written.m_strResult, "not valid" );
+    EXPECT_EQ( written.m_rgstrErrors.size(), 2u ) << StrErrors( written ); // Each <a> hasn't r.
+    EXPECT_FALSE( written.m_fIncomplete ); // The edited DTD has the external subset as it was read.
+  }
+}
+
 TYPED_TEST( DtdTest, DeclaredEncoding )
 {
   typedef TypeParam TyChar;

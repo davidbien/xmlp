@@ -567,6 +567,219 @@ TYPED_TEST( WriterTest, DoctypeDeclOfDtd )
   EXPECT_ANY_THROW( twNone->WriteDoctypeDecl( xml_dtd< TyChar >() ) );
 }
 
+// Validation of what is written - see xml_writer<>::SetValidate().
+static const char s_szValidateDoctype[] =
+  "<!DOCTYPE doc [\n"
+  "<!ELEMENT doc (a,b*)>\n"
+  "<!ELEMENT a (#PCDATA)>\n"
+  "<!ELEMENT b EMPTY>\n"
+  "<!ATTLIST b id ID #REQUIRED ref IDREF #IMPLIED t (x|y) 'x'>\n"
+  "<!ENTITY ws ' \t'>\n"
+  "<!ENTITY txt 'text'>\n"
+  "<!ENTITY mk '<a>m</a>'>\n"
+  "]>";
+// Whether the errors have one which has _pszText.
+bool FHasError( std::vector< std::string > const & _rrgstrErrors, const char * _pszText )
+{
+  for ( std::string const & rstr : _rrgstrErrors )
+    if ( std::string::npos != rstr.find( _pszText ) )
+      return true;
+  return false;
+}
+std::string StrErrors( std::vector< std::string > const & _rrgstrErrors )
+{
+  std::string str;
+  for ( std::string const & rstr : _rrgstrErrors )
+    str += rstr + "\n";
+  return str;
+}
+
+TYPED_TEST( WriterTest, ValidateValid )
+{
+  typedef TypeParam TyChar;
+  TestWriter< TyChar > tw;
+  tw->SetValidate();
+  tw->WriteDoctypeDecl( s_szValidateDoctype );
+  {
+    auto xwtDoc = tw->StartTag( "doc" );
+    tw->WriteCharData( "\n  " );
+    tw->WriteElement( "a", "some text" );
+    tw->WriteEntityReference( "ws" ); // White space - among the elements.
+    tw->WriteComment( " c " );
+    {
+      auto xwtB = tw->StartTag( "b" );
+      xwtB.AddAttribute( "id", " i1 " ); // Normalized as an ID: "i1".
+    }
+    {
+      auto xwtB = tw->StartTag( "b" );
+      xwtB.AddAttribute( "id", "i2" );
+      xwtB.AddAttribute( "ref", "i1" );
+      xwtB.AddAttribute( "t", "y" );
+    }
+    tw->WriteCharData( "\n" );
+  }
+  tw->EndDocument();
+  EXPECT_TRUE( tw->FIsValid() ) << StrErrors( tw->RgValidityErrors() );
+  EXPECT_FALSE( tw->FValidationIncomplete() );
+  EXPECT_TRUE( tw->RgValidityErrorsOfDtd().empty() );
+  // What is written is as valid when it is read.
+  ReadDocument< TyChar > doc( tw.StrWritten() );
+  EXPECT_EQ( doc.m_strError, "" );
+}
+
+TYPED_TEST( WriterTest, ValidateNotValid )
+{
+  typedef TypeParam TyChar;
+  TestWriter< TyChar > tw;
+  tw->SetValidate();
+  tw->WriteDoctypeDecl( s_szValidateDoctype );
+  {
+    auto xwtDoc = tw->StartTag( "doc" );
+    {
+      auto xwtB = tw->StartTag( "b" ); // Not where the content model has a <b>: an <a> is first.
+      xwtB.AddAttribute( "ref", "nowhere" ); // An IDREF which isn't an ID - and no id, which is #REQUIRED.
+      xwtB.AddAttribute( "t", "z" ); // Not one of those listed.
+    }
+    tw->WriteCharData( "text" ); // What is within <doc> isn't looked at once it isn't as declared - see below.
+    tw->WriteEntityReference( "txt" );
+    {
+      auto xwtC = tw->StartTag( "c" ); // Not declared.
+    }
+  }
+  tw->EndDocument();
+  EXPECT_FALSE( tw->FIsValid() );
+  std::vector< std::string > const & rrgstrErrors = tw->RgValidityErrors();
+  EXPECT_TRUE( FHasError( rrgstrErrors, "<b>" ) ) << StrErrors( rrgstrErrors );
+  EXPECT_TRUE( FHasError( rrgstrErrors, "nowhere" ) ) << StrErrors( rrgstrErrors );
+  EXPECT_TRUE( FHasError( rrgstrErrors, "[id]" ) ) << StrErrors( rrgstrErrors );
+  EXPECT_TRUE( FHasError( rrgstrErrors, "[z]" ) ) << StrErrors( rrgstrErrors );
+  EXPECT_TRUE( FHasError( rrgstrErrors, "<c>" ) ) << StrErrors( rrgstrErrors );
+  EXPECT_EQ( rrgstrErrors.size(), 5u ) << StrErrors( rrgstrErrors );
+  // It was written all the same.
+  EXPECT_EQ( tw.StrNarrowWritten(), std::string( s_szValidateDoctype ) + "<doc><b ref=\"nowhere\" t=\"z\"/>text&txt;<c/></doc>" );
+  // Character data in element content - from a reference as well; and white space in an element declared EMPTY.
+  for ( int nCase = 0; nCase < 3; ++nCase )
+  {
+    TestWriter< TyChar > twCharData;
+    twCharData->SetValidate();
+    twCharData->WriteDoctypeDecl( s_szValidateDoctype );
+    {
+      auto xwtDoc = twCharData->StartTag( "doc" );
+      twCharData->WriteElement( "a", "" );
+      if ( 0 == nCase )
+        twCharData->WriteCharData( " text " );
+      else
+      if ( 1 == nCase )
+        twCharData->WriteEntityReference( "txt" );
+      else
+      {
+        auto xwtB = twCharData->StartTag( "b" );
+        xwtB.AddAttribute( "id", "i" );
+        twCharData->WriteCharData( " " );
+      }
+    }
+    twCharData->EndDocument();
+    EXPECT_EQ( twCharData->RgValidityErrors().size(), 1u ) << nCase << ": " << StrErrors( twCharData->RgValidityErrors() );
+    EXPECT_TRUE( FHasError( twCharData->RgValidityErrors(), ( 2 == nCase ) ? "EMPTY" : "character data" ) ) << nCase << ": " << StrErrors( twCharData->RgValidityErrors() );
+  }
+}
+
+TYPED_TEST( WriterTest, ValidateWhatIsNotKnown )
+{
+  typedef TypeParam TyChar;
+  // An entity with markup: what is within the element isn't known from there on.
+  {
+    TestWriter< TyChar > tw;
+    tw->SetValidate();
+    tw->WriteDoctypeDecl( s_szValidateDoctype );
+    {
+      auto xwtDoc = tw->StartTag( "doc" );
+      tw->WriteEntityReference( "mk" );
+    }
+    tw->EndDocument();
+    EXPECT_TRUE( tw->FValidationIncomplete() );
+    EXPECT_TRUE( tw->FIsValid() ) << StrErrors( tw->RgValidityErrors() ); // Nothing which was known violates.
+  }
+  // An external subset which isn't read: not all of the declarations are known.
+  {
+    TestWriter< TyChar > tw;
+    tw->SetValidate();
+    tw->WriteDoctypeDecl( "<!DOCTYPE doc SYSTEM 'doc.dtd' [<!ELEMENT doc EMPTY>]>" );
+    tw->WriteElement( "doc", "" );
+    tw->EndDocument();
+    EXPECT_TRUE( tw->FValidationIncomplete() );
+    EXPECT_TRUE( tw->FIsValid() ) << StrErrors( tw->RgValidityErrors() );
+  }
+  // No document type declaration: there is nothing to be valid against.
+  {
+    TestWriter< TyChar > tw;
+    tw->SetValidate();
+    tw->WriteElement( "doc", "" );
+    tw->EndDocument();
+    EXPECT_FALSE( tw->FIsValid() );
+    EXPECT_EQ( tw->RgValidityErrors().size(), 1u ) << StrErrors( tw->RgValidityErrors() );
+  }
+  // Without validation nothing is said.
+  {
+    TestWriter< TyChar > tw;
+    tw->WriteDoctypeDecl( s_szValidateDoctype );
+    tw->WriteElement( "doc", "" );
+    tw->EndDocument();
+    EXPECT_FALSE( tw->FIsValid() );
+    EXPECT_TRUE( tw->RgValidityErrors().empty() );
+    // And it is too late to set it.
+    EXPECT_ANY_THROW( tw->SetValidate() );
+  }
+}
+
+// Validity errors thrown - when the tag is committed.
+TYPED_TEST( WriterTest, ValidateThrows )
+{
+  typedef TypeParam TyChar;
+  TestWriter< TyChar > tw;
+  tw->SetValidate();
+  tw->SetThrowOnValidityError();
+  tw->WriteDoctypeDecl( s_szValidateDoctype );
+  // ( The tag of the document is ended as the exception passes: what that throws is passed over. )
+  EXPECT_ANY_THROW(
+    {
+      auto xwtDoc = tw->StartTag( "doc" );
+      tw->WriteElement( "c", "" );
+    } );
+  EXPECT_TRUE( tw->RgValidityErrors().empty() ); // Thrown and not recorded.
+}
+
+// The DTD of an xml_dtd - in another type of character - and namespaces: names are as they are written.
+TYPED_TEST( WriterTest, ValidateWithDtd )
+{
+  typedef TypeParam TyChar;
+  xml_dtd< char32_t > dtd;
+  dtd.SetRootName( U"p:doc" );
+  {
+    xml_dtd_element< char32_t > element;
+    element.m_strName = U"p:doc";
+    element.m_eContent = exdcEmpty;
+    dtd.SetElementDecl( element );
+    xml_dtd_attdef< char32_t > attdef;
+    attdef.m_strName = U"xmlns:p";
+    attdef.m_eDefault = exdadImplied;
+    dtd.SetAttDef( U"p:doc", attdef );
+    attdef.m_strName = U"p:n";
+    attdef.m_eType = exdatNMTOKENS;
+    dtd.SetAttDef( U"p:doc", attdef );
+  }
+  TestWriter< TyChar > tw;
+  tw->SetValidate();
+  tw->WriteDoctypeDecl( dtd );
+  {
+    auto xwtDoc = tw->StartTag( "doc", "p", "urn:p" );
+    xwtDoc.AddAttribute( "p:n", "  a  b " );
+  }
+  tw->EndDocument();
+  EXPECT_TRUE( tw->FIsValid() ) << StrErrors( tw->RgValidityErrors() );
+  EXPECT_EQ( tw.StrNarrowWritten(), "<!DOCTYPE p:doc [\n<!ELEMENT p:doc EMPTY>\n<!ATTLIST p:doc xmlns:p CDATA #IMPLIED>\n<!ATTLIST p:doc p:n NMTOKENS #IMPLIED>\n]><p:doc xmlns:p=\"urn:p\" p:n=\"  a  b \"/>" );
+}
+
 // Pretty printing - see xml_writer<>::SetOutputFormat().
 _xml_output_format XofPretty( int8_t _byNSpacesPerIndent = 2, size_t _nMaxIndentLevels = 32 )
 {
